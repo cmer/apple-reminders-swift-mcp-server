@@ -31,11 +31,12 @@ Create a production-ready MCP server that exposes complete Apple Reminders funct
 - Fine-grained tool design (many specific tools for better AI discoverability)
 
 **Apple Reminders Access**
-- **JXA (JavaScript for Automation)** - Primary integration method
-  - Native TypeScript/JavaScript integration
-  - Direct AppleScript bridge without compilation
-  - Access to Reminders.app via macOS scripting APIs
-  - No additional language runtime required
+- **Swift + EventKit** - Primary integration method
+  - Native macOS EventKit framework for full reminder access
+  - Compiled Swift CLI binary for performance and reliability
+  - Direct access to EventKit APIs (no scripting layer)
+  - Support for recurring reminders and location-based features
+  - TypeScript MCP server executes Swift CLI via child_process
 
 **Development Tools**
 - **Zod** - Runtime type validation and schema definition
@@ -65,14 +66,25 @@ Create a production-ready MCP server that exposes complete Apple Reminders funct
 │  └───────────┬──────────────────┘  │
 │              │                      │
 │  ┌───────────▼──────────────────┐  │
-│  │  Business Logic Layer        │  │
+│  │  Swift CLI Executor          │  │
+│  │  (child_process + JSON)      │  │
+│  └───────────┬──────────────────┘  │
+└──────────────┼──────────────────────┘
+               │ Process boundary
+               │ (JSON input/output)
+┌──────────────▼──────────────────────┐
+│   Swift CLI Binary                  │
+│                                     │
+│  ┌──────────────────────────────┐  │
+│  │  Command Router              │  │
 │  └───────────┬──────────────────┘  │
 │              │                      │
 │  ┌───────────▼──────────────────┐  │
-│  │  JXA Bridge Layer            │  │
+│  │  EventKit Integration        │  │
+│  │  (EKEventStore, EKReminder)  │  │
 │  └───────────┬──────────────────┘  │
 └──────────────┼──────────────────────┘
-               │ JXA/OSA Runtime
+               │ EventKit Framework
                │
 ┌──────────────▼──────────────────────┐
 │   Apple Reminders.app (macOS)       │
@@ -83,18 +95,29 @@ Create a production-ready MCP server that exposes complete Apple Reminders funct
 
 ```
 apple-reminders-mcp-server/
-├── src/
-│   ├── index.ts                 # MCP server entry point
-│   ├── server.ts                # MCP server setup and configuration
-│   ├── tools/                   # MCP tool handlers
+├── swift-cli/                   # Swift CLI binary
+│   ├── Package.swift           # Swift Package Manager manifest
+│   ├── Sources/
+│   │   ├── RemindersKit/       # Main library
+│   │   │   ├── ReminderManager.swift
+│   │   │   ├── ListManager.swift
+│   │   │   ├── EventKitBridge.swift
+│   │   │   └── Models/         # Swift data models
+│   │   └── reminders-cli/      # CLI executable
+│   │       └── main.swift      # CLI entry point
+│   └── Tests/
+│       └── RemindersKitTests/
+├── src/                        # TypeScript MCP Server
+│   ├── index.ts                # MCP server entry point
+│   ├── server.ts               # MCP server setup and configuration
+│   ├── tools/                  # MCP tool handlers
 │   │   ├── reminders/          # Reminder CRUD operations
 │   │   ├── lists/              # List management operations
 │   │   ├── search/             # Search and filter operations
 │   │   └── batch/              # Batch operations
-│   ├── jxa/                    # JXA bridge layer
-│   │   ├── runner.ts           # JXA script executor
-│   │   ├── scripts/            # JXA script templates
-│   │   └── types.ts            # TypeScript types for JXA objects
+│   ├── executor/               # Swift CLI executor layer
+│   │   ├── swift-executor.ts   # Executes Swift CLI binary
+│   │   └── types.ts            # TypeScript types for CLI I/O
 │   ├── validation/             # Zod schemas and validators
 │   ├── utils/                  # Shared utilities
 │   └── types/                  # TypeScript type definitions
@@ -115,55 +138,61 @@ apple-reminders-mcp-server/
 
 ## Feature Requirements
 
-### Comprehensive Apple Reminders Feature Coverage
+### Apple Reminders Feature Coverage (~70%)
 
-#### 1. Core Reminder Attributes
+**Note**: EventKit provides access to most Apple Reminders features. However, **tags** and **subtasks** are only available through private Apple APIs and cannot be accessed via EventKit. This implementation will provide workarounds for these features.
+
+#### 1. Core Reminder Attributes (Fully Supported)
 - **Title** (required) - Reminder name/description
 - **Notes** - Rich text notes (Markdown-compatible)
 - **Completion Status** - Completed vs incomplete
 - **Priority** - None, Low, Medium, High (0-9 in macOS)
 - **Due Date** - Optional date/time when reminder is due
-- **Tags** - Multiple tags for organization
 - **URLs** - Associated web links
 - **Flagged Status** - Mark as flagged for importance
+- **⚠️ Tags** - NOT natively supported (workaround: encode as `[#tag]` in notes)
+- **Creation/Modification Dates** - Automatically tracked by EventKit
 
-#### 2. Advanced Scheduling
-- **Recurring Reminders** - Daily, weekly, monthly, yearly, custom intervals
-- **End Repeat** - Never, on date, after N occurrences
-- **Early Reminders/Alerts** - Notify before due date (e.g., 1 day before)
-- **Multiple Alerts** - Support for multiple notification times
-- **Time-of-Day Reminders** - Specific time vs all-day
-- **Custom Repeat Rules** - Every N days/weeks/months, specific days of week
+#### 2. Advanced Scheduling (Fully Supported via EventKit)
+- **✅ Recurring Reminders** - Daily, weekly, monthly, yearly, custom intervals
+- **✅ Recurrence Rules** - Complex patterns via EKRecurrenceRule
+- **✅ End Repeat** - Never, on date, after N occurrences
+- **✅ Multiple Alarms** - Support for multiple notification times via EKAlarm
+- **✅ Time-of-Day Reminders** - Specific time vs all-day
+- **✅ Relative Alarms** - Trigger at offset from due date (e.g., 1 day before)
+- **✅ Absolute Alarms** - Trigger at specific date/time
 
-#### 3. Organization
-- **Lists** - Organize reminders into lists
-- **Smart Lists** - Dynamic lists based on criteria (today, scheduled, flagged, etc.)
-- **List Groups** - Organize lists into groups
-- **Subtasks (Sub-reminders)** - Hierarchical task breakdown
-- **List Colors/Icons** - Visual customization
-- **Default List** - Set default list for new reminders
+#### 3. Organization (Partially Supported)
+- **✅ Lists** - Organize reminders into lists (EKCalendar)
+- **✅ List Colors** - Visual customization via EKCalendar.color
+- **✅ Default List** - Set default list for new reminders
+- **⚠️ Smart Lists** - NOT accessible via EventKit (built-in to Reminders.app UI only)
+- **⚠️ List Groups** - NOT accessible via EventKit
+- **⚠️ Subtasks** - NOT natively supported (workaround: linked reminders or structured notes)
 
-#### 4. Location & Context
-- **Location-based Reminders** - Trigger at arrival/departure from location
-- **Geofence Radius** - Customizable proximity trigger
-- **Attachments/Images** - Associate images and files (if supported via JXA)
-- **Contact Association** - Link reminders to contacts
+#### 4. Location & Context (Fully Supported via EventKit)
+- **✅ Location-based Reminders** - Trigger at arrival/departure via EKStructuredLocation
+- **✅ Geofence Radius** - Customizable proximity trigger
+- **✅ Proximity Alarms** - Arriving/leaving location triggers
+- **✅ URLs** - Associate web links with reminders
+- **⚠️ Attachments** - NOT supported via EventKit (private API only)
+- **⚠️ Contact Association** - NOT supported via EventKit
 
-#### 5. Search & Filtering
-- **Text Search** - Search by title, notes, tags
-- **Date Filters** - Due today, overdue, scheduled, completed
-- **Priority Filters** - Filter by priority level
-- **Tag Filters** - Filter by one or multiple tags
-- **List Filters** - Filter by specific list
-- **Completion Filters** - Show completed, incomplete, or both
-- **Combined Filters** - Multiple criteria simultaneously
+#### 5. Search & Filtering (Fully Supported via EventKit)
+- **✅ Text Search** - Search by title, notes via NSPredicate
+- **✅ Date Filters** - Due today, overdue, scheduled, completed
+- **✅ Priority Filters** - Filter by priority level
+- **✅ List Filters** - Filter by specific calendar/list
+- **✅ Completion Filters** - Show completed, incomplete, or both
+- **✅ Combined Filters** - Multiple criteria via NSPredicate
+- **✅ Tag Filters** - Filter by tags (via workaround search in notes)
 
-#### 6. Batch Operations
-- **Bulk Create** - Create multiple reminders at once
-- **Bulk Update** - Update multiple reminders (e.g., change list, add tag)
-- **Bulk Complete** - Mark multiple reminders as complete
-- **Bulk Delete** - Delete multiple reminders
-- **Batch Move** - Move reminders between lists
+#### 6. Batch Operations (Fully Supported via EventKit)
+- **✅ Bulk Create** - Create multiple reminders via EKEventStore batch commits
+- **✅ Bulk Update** - Update multiple reminders efficiently
+- **✅ Bulk Complete** - Mark multiple reminders as complete
+- **✅ Bulk Delete** - Delete multiple reminders
+- **✅ Batch Move** - Move reminders between lists/calendars
 
 ## MCP Tools Specification
 
@@ -176,49 +205,44 @@ apple-reminders-mcp-server/
 ### Tool Categories
 
 #### Reminder Management Tools
-1. `create_reminder` - Create a new reminder with all attributes
+1. `create_reminder` - Create a new reminder with all attributes (including recurrence, location)
 2. `get_reminder` - Get reminder by ID with full details
 3. `update_reminder` - Update existing reminder attributes
 4. `delete_reminder` - Delete a reminder
 5. `complete_reminder` - Mark reminder as complete
 6. `uncomplete_reminder` - Mark reminder as incomplete
-7. `add_subtask` - Add a sub-reminder to a reminder
-8. `remove_subtask` - Remove a sub-reminder
 
 #### List Management Tools
-9. `create_list` - Create a new reminder list
-10. `get_list` - Get list details and optionally its reminders
-11. `get_all_lists` - Get all reminder lists
-12. `update_list` - Update list properties (name, color, icon)
-13. `delete_list` - Delete a list
-14. `create_smart_list` - Create a smart list with criteria
-15. `get_list_groups` - Get all list groups
+7. `create_list` - Create a new reminder list (calendar)
+8. `get_list` - Get list details and optionally its reminders
+9. `get_all_lists` - Get all reminder lists
+10. `update_list` - Update list properties (name, color)
+11. `delete_list` - Delete a list
 
 #### Search & Query Tools
-16. `search_reminders` - Search reminders with filters
-17. `get_reminders_by_date` - Get reminders due on/before/after date
-18. `get_reminders_by_tag` - Get reminders with specific tags
-19. `get_completed_reminders` - Get completed reminders with date range
-20. `get_overdue_reminders` - Get all overdue reminders
-21. `get_todays_reminders` - Get reminders due today
-22. `get_flagged_reminders` - Get all flagged reminders
+12. `search_reminders` - Search reminders with filters (NSPredicate-based)
+13. `get_reminders_by_date` - Get reminders due on/before/after date
+14. `get_reminders_by_tag` - Get reminders with specific tags (via notes search)
+15. `get_completed_reminders` - Get completed reminders with date range
+16. `get_overdue_reminders` - Get all overdue reminders
+17. `get_todays_reminders` - Get reminders due today
+18. `get_flagged_reminders` - Get all flagged reminders
 
 #### Batch Operation Tools
-23. `batch_create_reminders` - Create multiple reminders
-24. `batch_update_reminders` - Update multiple reminders
-25. `batch_complete_reminders` - Complete multiple reminders
-26. `batch_delete_reminders` - Delete multiple reminders
-27. `move_reminders_to_list` - Move multiple reminders to a list
+19. `batch_create_reminders` - Create multiple reminders
+20. `batch_update_reminders` - Update multiple reminders
+21. `batch_complete_reminders` - Complete multiple reminders
+22. `batch_delete_reminders` - Delete multiple reminders
+23. `move_reminders_to_list` - Move multiple reminders to a list
 
-#### Tag Management Tools
-28. `get_all_tags` - Get all tags used across reminders
-29. `add_tags_to_reminder` - Add tags to a reminder
-30. `remove_tags_from_reminder` - Remove tags from a reminder
+#### Tag Management Tools (Workaround-based)
+24. `get_all_tags` - Get all tags from notes field (via workaround)
+25. `add_tags_to_reminder` - Add tags to notes field (via workaround)
+26. `remove_tags_from_reminder` - Remove tags from notes field (via workaround)
 
-#### Recurring Reminder Tools
-31. `create_recurring_reminder` - Create reminder with recurrence rule
-32. `update_recurrence_rule` - Update recurrence pattern
-33. `remove_recurrence` - Convert recurring reminder to one-time
+#### Location-based Reminder Tools
+27. `add_location_alert` - Add location-based trigger to reminder
+28. `remove_location_alert` - Remove location trigger from reminder
 
 ### Example Tool Schema
 
@@ -293,9 +317,11 @@ enum ErrorCode {
 
   // Permission Errors (403-level)
   REMINDERS_ACCESS_DENIED = "REMINDERS_ACCESS_DENIED",
+  EVENTKIT_ACCESS_DENIED = "EVENTKIT_ACCESS_DENIED",
 
   // System Errors (500-level)
-  JXA_EXECUTION_FAILED = "JXA_EXECUTION_FAILED",
+  SWIFT_CLI_EXECUTION_FAILED = "SWIFT_CLI_EXECUTION_FAILED",
+  EVENTKIT_ERROR = "EVENTKIT_ERROR",
   INTERNAL_ERROR = "INTERNAL_ERROR",
 }
 
@@ -332,23 +358,28 @@ interface MCPError {
 
 ### Unit Tests
 - **Coverage Target**: 80%+ line coverage
-- **Framework**: Vitest
+- **Frameworks**: Vitest (TypeScript), XCTest (Swift)
 - **Scope**:
   - Validation functions (Zod schemas)
-  - Tool handler logic (with mocked JXA)
+  - Tool handler logic (with mocked Swift CLI)
+  - Swift CLI unit tests (EventKit integration points)
   - Utility functions
   - Error handling paths
 
 ### Integration Tests
-- **Framework**: Vitest
+- **Frameworks**: Vitest (TypeScript), XCTest (Swift)
 - **Scope**:
-  - Actual JXA execution against Apple Reminders
+  - Actual Swift CLI execution against Apple Reminders
   - Full tool workflows (create → read → update → delete)
   - Cross-tool interactions (e.g., create list, add reminder to it)
+  - EventKit permission handling
+  - Recurring reminder creation and validation
+  - Location-based reminder triggers
 - **Requirements**:
   - Test list cleanup before/after tests
   - Isolated test data (prefix with "TEST_")
   - Idempotent test execution
+  - EventKit authorization granted before tests
 
 ### Manual Testing
 - **MCP Inspector** - Test individual tools during development
@@ -379,16 +410,17 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 
 #### Phase 1: Exploration & Understanding
 1. **Explore Agent** - Map out the Apple Reminders capabilities
-   - Research JXA APIs for Reminders.app
+   - Research EventKit APIs and EKReminder capabilities
    - Understand data models and constraints
    - Document available operations and limitations
 
 #### Phase 2: Planning
 2. **Plan Agent** - Design implementation strategy
-   - Design JXA bridge architecture
-   - Plan tool handler structure
+   - Design Swift CLI architecture with EventKit integration
+   - Plan TypeScript executor layer and tool handlers
    - Define validation schemas
    - Identify dependencies and risks
+   - Plan build and distribution strategy
 
 #### Phase 3: Implementation
 3. **Iterative Development**
@@ -490,7 +522,12 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 
 ## Dependencies
 
-### Production Dependencies
+### Swift Dependencies
+- **EventKit** - Apple's framework for calendar and reminder access (built-in to macOS)
+- **Foundation** - Swift standard library (built-in)
+- **Swift 5.9+** - Modern Swift language features
+
+### TypeScript/Node.js Production Dependencies
 ```json
 {
   "@modelcontextprotocol/sdk": "latest",
@@ -499,7 +536,7 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 }
 ```
 
-### Development Dependencies
+### TypeScript/Node.js Development Dependencies
 ```json
 {
   "@types/node": "^20.x",
@@ -513,35 +550,44 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 }
 ```
 
+### Build Requirements
+- **macOS 13.0+** - Required for EventKit reminder features
+- **Xcode 15+** - Swift compiler and development tools
+- **Node.js 18+** - TypeScript runtime
+- **Swift Package Manager** - Dependency management and build
+
 ## Implementation Milestones
 
 ### Milestone 1: Foundation (MVP)
-- Project setup with TypeScript, MCP SDK, and build tools
-- JXA bridge layer with basic Reminders.app access
+- Swift CLI setup with EventKit integration
+- TypeScript MCP server setup with @modelcontextprotocol/sdk
+- Swift CLI executor layer (child_process + JSON)
 - Core tools: `create_reminder`, `get_reminder`, `update_reminder`, `delete_reminder`
 - Basic list tools: `create_list`, `get_all_lists`
 - Validation layer with Zod
+- Build scripts for Swift CLI compilation
 - Unit tests for core functionality
 - README with basic setup instructions
 
 ### Milestone 2: Advanced Features
-- Advanced scheduling tools (recurring reminders, alerts)
-- Subtask/sub-reminder support
-- Tag management tools
-- Search and filter tools
-- Smart list support
+- Recurring reminder support (EKRecurrenceRule)
+- Location-based reminders (EKStructuredLocation)
+- Multiple alarms support (EKAlarm)
+- Tag management tools (workaround via notes)
+- Search and filter tools (NSPredicate)
 - Integration tests
 - API documentation
 
 ### Milestone 3: Batch Operations & Polish
 - Batch operation tools
-- Location-based reminders
-- Performance optimization (caching, batching)
+- Performance optimization (batch commits, caching)
 - Comprehensive error handling
-- Full test coverage
+- EventKit permission handling
+- Full test coverage (TypeScript + Swift)
 - Complete documentation suite
 
 ### Milestone 4: Production Ready
+- Pre-compiled Swift binaries for distribution
 - Hot reload for development
 - Detailed logging system
 - Edge case handling
@@ -552,15 +598,20 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 ## Success Criteria
 
 ### Functional Requirements
-- [ ] All 30+ MCP tools implemented and working
-- [ ] Support for all Apple Reminders features mentioned in specification
+- [ ] All ~28 MCP tools implemented and working
+- [ ] Support for ~70% of Apple Reminders features (all EventKit-accessible features)
+- [ ] Recurring reminders fully functional
+- [ ] Location-based reminders fully functional
+- [ ] Tag workaround via notes field working
 - [ ] Successful integration with Claude Desktop
 - [ ] Natural language commands correctly translated to tool calls
 
 ### Quality Requirements
-- [ ] 80%+ test coverage (unit + integration)
+- [ ] 80%+ test coverage (TypeScript unit + integration)
+- [ ] Swift tests for EventKit integration
 - [ ] All tests passing consistently
 - [ ] TypeScript strict mode with no errors
+- [ ] Swift builds without warnings
 - [ ] No ESLint violations
 - [ ] Clean, maintainable code structure
 
@@ -589,6 +640,8 @@ This project will follow a **structured, agent-driven workflow** leveraging Clau
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2024-01-15
-**Status**: Ready for Implementation
+**Document Version**: 2.0 (EventKit + Swift)
+**Last Updated**: 2026-01-03
+**Status**: Ready for Implementation with EventKit
+**Architecture**: Swift CLI + EventKit + TypeScript MCP Server
+**Feature Coverage**: ~70% (all EventKit-accessible features)
