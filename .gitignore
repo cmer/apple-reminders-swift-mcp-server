@@ -1,0 +1,32 @@
+# Node.js
+node_modules/
+dist/
+*.log
+npm-debug.log*
+.npm
+
+# Swift
+swift-cli/.build/
+swift-cli/.swiftpm/
+*.xcodeproj
+*.xcworkspace
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Testing
+coverage/
+.nyc_output/
+

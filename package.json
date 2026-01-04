@@ -1,0 +1,56 @@
+{
+  "name": "apple-reminders-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for Apple Reminders integration using EventKit + Swift",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "apple-reminders-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "build:swift": "./scripts/build-swift-cli.sh",
+    "setup": "./scripts/setup.sh",
+    "clean": "./scripts/clean.sh"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "apple",
+    "reminders",
+    "eventkit",
+    "macos",
+    "swift",
+    "ai",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}
+
