@@ -12,7 +12,7 @@
 ### Phase 2: Core CRUD Tools ✅
 
 **Update Operations**:
-- ✅ `update_reminder` - Update title, notes, due date, priority, tags, list
+- ✅ `update_reminder` - Update title, notes, due date, priority (1=urgent!!!), tags, list
   - Swift: `ReminderManager.updateReminder()`
   - Validation: `updateReminderSchema`
   - Tested: Working end-to-end
@@ -131,7 +131,7 @@
   "title":"Weekly Team Meeting",
   "dueDate":"2026-01-13T10:00:00Z",
   "recurrence":{"frequency":"weekly","interval":1},
-  "priority":7
+  "priority":1
 }'
 ```
 ✅ Result: Success, `hasRecurrenceRules: true`, shows in Apple Reminders with repeat icon
@@ -215,7 +215,7 @@
 ### Basic CRUD
 ```
 "Create a reminder to finish the report"
-"Update the report reminder to high priority"
+"Update the report reminder to urgent priority (priority 1)"
 "Mark the report reminder as complete"
 "Delete the report reminder"
 ```
@@ -245,7 +245,7 @@
 ```
 "Create a reminder with 2 alarms - 1 day before and 1 hour before"
 "Set up a bi-weekly reminder (every 2 weeks)"
-"Create a high-priority reminder with tags #work #urgent"
+"Create an URGENT reminder (priority 1 = !!!) with tags #work #critical"
 ```
 
 ---

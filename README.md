@@ -145,7 +145,8 @@ Restart Claude Desktop or Cursor to load the MCP server.
 
 ### Advanced Features
 ```
-"Create a high-priority reminder with tags #work #urgent"
+""Create an URGENT reminder with priority 1 to call the client"
+"Create a high-priority reminder with tags #work #urgent""
 "Set up a reminder with multiple alarms - 1 day before and 1 hour before"
 "Create a reminder that repeats every other week"
 ```
@@ -172,8 +173,8 @@ Apple Reminders.app
 - **Search**: Text search in title and notes
 - **Date Queries**: Today, overdue, completed with date ranges
 - **Lists**: Get all lists, specify list for reminders
-- **Priority**: 0-9 scale (none, low, medium, high)
-- **Flagged Status**: Mark reminders as important
+- **Priority**: 0=none, 1=urgent (!!!), 5=medium, 9=low
+- **Flagged Status**: Mark reminders as important (flag icon)
 - **Notes & URLs**: Rich text notes, associated URLs
 
 ### ⚠️ Workarounds
@@ -243,8 +244,8 @@ npm run build
 ### Test Swift CLI Directly
 
 ```bash
-# Create a reminder
-./swift-cli/.build/release/reminders-cli create-reminder '{"title":"Test","priority":5}'
+# Create an urgent reminder (priority 1 = shows !!! in Reminders.app)
+./swift-cli/.build/release/reminders-cli create-reminder '{"title":"URGENT: Fix bug","priority":1}'
 
 # Create recurring reminder
 ./swift-cli/.build/release/reminders-cli create-reminder '{
