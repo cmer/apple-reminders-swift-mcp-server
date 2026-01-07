@@ -33,8 +33,7 @@ export class SwiftExecutor {
   constructor(options: SwiftExecutorOptions = {}) {
     // Default to release build for better performance
     this.cliPath =
-      options.cliPath ||
-      path.join(__dirname, '../../swift-cli/.build/release/reminders-cli');
+      options.cliPath || path.join(__dirname, '../../swift-cli/.build/release/reminders-cli');
     this.timeout = options.timeout || 30000; // 30 seconds default
   }
 
@@ -58,10 +57,7 @@ export class SwiftExecutor {
       }
 
       if (!response.data) {
-        throw new MCPError(
-          MCPErrorCode.INTERNAL_ERROR,
-          'Swift CLI returned success but no data'
-        );
+        throw new MCPError(MCPErrorCode.INTERNAL_ERROR, 'Swift CLI returned success but no data');
       }
 
       return response.data;
@@ -111,11 +107,9 @@ export class SwiftExecutor {
 
       return JSON.parse(result);
     } catch (error) {
-      throw new MCPError(
-        MCPErrorCode.PERMISSION_DENIED,
-        'Failed to request access to reminders',
-        { originalError: error }
-      );
+      throw new MCPError(MCPErrorCode.PERMISSION_DENIED, 'Failed to request access to reminders', {
+        originalError: error,
+      });
     }
   }
 
@@ -134,4 +128,3 @@ export class SwiftExecutor {
     });
   }
 }
-

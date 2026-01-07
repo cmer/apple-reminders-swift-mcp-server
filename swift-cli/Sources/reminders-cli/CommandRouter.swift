@@ -13,10 +13,22 @@ class CommandRouter {
             return try await handleCreateReminder(jsonInput: jsonInput)
         case "get-reminder":
             return try await handleGetReminder(jsonInput: jsonInput)
+        case "update-reminder":
+            return try await handleUpdateReminder(jsonInput: jsonInput)
         case "list-reminders":
             return try await handleListReminders(jsonInput: jsonInput)
+        case "search-reminders":
+            return try await handleSearchReminders(jsonInput: jsonInput)
+        case "get-todays-reminders":
+            return try await handleGetTodaysReminders()
+        case "get-overdue-reminders":
+            return try await handleGetOverdueReminders()
+        case "get-completed-reminders":
+            return try await handleGetCompletedReminders(jsonInput: jsonInput)
         case "complete-reminder":
             return try await handleCompleteReminder(jsonInput: jsonInput)
+        case "uncomplete-reminder":
+            return try await handleUncompleteReminder(jsonInput: jsonInput)
         case "delete-reminder":
             return try await handleDeleteReminder(jsonInput: jsonInput)
         case "get-all-lists":
@@ -64,6 +76,35 @@ class CommandRouter {
         return try encodeResponse(response)
     }
     
+    private func handleUpdateReminder(jsonInput: String) throws -> String {
+        struct UpdateReminderInput: Codable {
+            let id: String
+            let title: String
+            let notes: String?
+            let listName: String?
+            let dueDate: String?
+            let priority: Int?
+            let flagged: Bool?
+            let url: String?
+            let tags: [String]?
+        }
+        
+        let input = try decodeInput(UpdateReminderInput.self, from: jsonInput)
+        let updateInput = CreateReminderInput(
+            title: input.title,
+            notes: input.notes,
+            listName: input.listName,
+            dueDate: input.dueDate,
+            priority: input.priority,
+            flagged: input.flagged,
+            url: input.url,
+            tags: input.tags
+        )
+        let reminder = try reminderManager.updateReminder(id: input.id, input: updateInput)
+        let response = CLIResponse(success: true, data: reminder)
+        return try encodeResponse(response)
+    }
+    
     private func handleCompleteReminder(jsonInput: String) throws -> String {
         struct CompleteReminderInput: Codable {
             let id: String
@@ -71,6 +112,17 @@ class CommandRouter {
         
         let input = try decodeInput(CompleteReminderInput.self, from: jsonInput)
         let reminder = try reminderManager.completeReminder(id: input.id)
+        let response = CLIResponse(success: true, data: reminder)
+        return try encodeResponse(response)
+    }
+    
+    private func handleUncompleteReminder(jsonInput: String) throws -> String {
+        struct UncompleteReminderInput: Codable {
+            let id: String
+        }
+        
+        let input = try decodeInput(UncompleteReminderInput.self, from: jsonInput)
+        let reminder = try reminderManager.uncompleteReminder(id: input.id)
         let response = CLIResponse(success: true, data: reminder)
         return try encodeResponse(response)
     }
@@ -95,6 +147,53 @@ class CommandRouter {
     private func handleGetAllLists() throws -> String {
         let lists = listManager.getAllLists()
         let response = CLIResponse(success: true, data: lists)
+        return try encodeResponse(response)
+    }
+    
+    private func handleSearchReminders(jsonInput: String) async throws -> String {
+        struct SearchInput: Codable {
+            let searchText: String
+            let completed: Bool?
+        }
+        
+        let input = try decodeInput(SearchInput.self, from: jsonInput)
+        let reminders = try await reminderManager.searchReminders(
+            searchText: input.searchText,
+            completed: input.completed
+        )
+        let response = CLIResponse(success: true, data: reminders)
+        return try encodeResponse(response)
+    }
+    
+    private func handleGetTodaysReminders() async throws -> String {
+        let reminders = try await reminderManager.getTodaysReminders()
+        let response = CLIResponse(success: true, data: reminders)
+        return try encodeResponse(response)
+    }
+    
+    private func handleGetOverdueReminders() async throws -> String {
+        let reminders = try await reminderManager.getOverdueReminders()
+        let response = CLIResponse(success: true, data: reminders)
+        return try encodeResponse(response)
+    }
+    
+    private func handleGetCompletedReminders(jsonInput: String) async throws -> String {
+        struct CompletedInput: Codable {
+            let startDate: String?
+            let endDate: String?
+        }
+        
+        let input = try decodeInput(CompletedInput.self, from: jsonInput)
+        
+        let formatter = ISO8601DateFormatter()
+        let startDate = input.startDate.flatMap { formatter.date(from: $0) }
+        let endDate = input.endDate.flatMap { formatter.date(from: $0) }
+        
+        let reminders = try await reminderManager.getCompletedReminders(
+            startDate: startDate,
+            endDate: endDate
+        )
+        let response = CLIResponse(success: true, data: reminders)
         return try encodeResponse(response)
     }
     

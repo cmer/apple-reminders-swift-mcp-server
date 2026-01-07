@@ -85,6 +85,9 @@ public struct CreateReminderInput: Codable {
     public let flagged: Bool?
     public let url: String?
     public let tags: [String]?
+    public let recurrence: RecurrenceRule?
+    public let location: ReminderLocation?
+    public let alarms: [ReminderAlarm]?
     
     public init(
         title: String,
@@ -94,7 +97,10 @@ public struct CreateReminderInput: Codable {
         priority: Int? = nil,
         flagged: Bool? = nil,
         url: String? = nil,
-        tags: [String]? = nil
+        tags: [String]? = nil,
+        recurrence: RecurrenceRule? = nil,
+        location: ReminderLocation? = nil,
+        alarms: [ReminderAlarm]? = nil
     ) {
         self.title = title
         self.notes = notes
@@ -104,6 +110,9 @@ public struct CreateReminderInput: Codable {
         self.flagged = flagged
         self.url = url
         self.tags = tags
+        self.recurrence = recurrence
+        self.location = location
+        self.alarms = alarms
     }
 }
 

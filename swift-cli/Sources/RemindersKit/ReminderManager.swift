@@ -52,6 +52,35 @@ public class ReminderManager {
             ekReminder.url = URL(string: urlString)
         }
         
+        // Set recurrence rule
+        if let recurrence = input.recurrence {
+            ekReminder.addRecurrenceRule(recurrence.toEKRecurrenceRule())
+        }
+        
+        // Add alarms
+        if let alarms = input.alarms {
+            for alarm in alarms {
+                ekReminder.addAlarm(alarm.toEKAlarm())
+            }
+        }
+        
+        // Add location-based alarm if location is provided
+        if let location = input.location {
+            let ekLocation = location.toEKStructuredLocation()
+            let locationAlarm = EKAlarm()
+            locationAlarm.structuredLocation = ekLocation
+            
+            // Set proximity (enter or leave)
+            switch location.proximity {
+            case .enter:
+                locationAlarm.proximity = .enter
+            case .leave:
+                locationAlarm.proximity = .leave
+            }
+            
+            ekReminder.addAlarm(locationAlarm)
+        }
+        
         // Find or use default calendar
         let calendar: EKCalendar
         if let listName = input.listName {
@@ -117,6 +146,71 @@ public class ReminderManager {
         return filteredReminders.map { Reminder(from: $0) }
     }
     
+    /// Search reminders by text
+    /// - Parameters:
+    ///   - searchText: Text to search for in title and notes
+    ///   - completed: Optional completion status filter
+    /// - Returns: Array of matching reminders
+    public func searchReminders(searchText: String, completed: Bool? = nil) async throws -> [Reminder] {
+        let allReminders = try await getAllReminders(completed: completed)
+        let lowercasedSearch = searchText.lowercased()
+        
+        return allReminders.filter { reminder in
+            let titleMatch = reminder.title.lowercased().contains(lowercasedSearch)
+            let notesMatch = reminder.notes?.lowercased().contains(lowercasedSearch) ?? false
+            return titleMatch || notesMatch
+        }
+    }
+    
+    /// Get reminders due today
+    /// - Returns: Array of reminders due today
+    public func getTodaysReminders() async throws -> [Reminder] {
+        let allReminders = try await getAllReminders(completed: false)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        
+        return allReminders.filter { reminder in
+            guard let dueDate = reminder.dueDate else { return false }
+            return dueDate >= today && dueDate < tomorrow
+        }
+    }
+    
+    /// Get overdue reminders
+    /// - Returns: Array of overdue reminders
+    public func getOverdueReminders() async throws -> [Reminder] {
+        let allReminders = try await getAllReminders(completed: false)
+        let now = Date()
+        
+        return allReminders.filter { reminder in
+            guard let dueDate = reminder.dueDate else { return false }
+            return dueDate < now
+        }
+    }
+    
+    /// Get completed reminders within a date range
+    /// - Parameters:
+    ///   - startDate: Start date (optional)
+    ///   - endDate: End date (optional)
+    /// - Returns: Array of completed reminders
+    public func getCompletedReminders(startDate: Date? = nil, endDate: Date? = nil) async throws -> [Reminder] {
+        let allReminders = try await getAllReminders(completed: true)
+        
+        return allReminders.filter { reminder in
+            guard let completionDate = reminder.completionDate else { return false }
+            
+            if let start = startDate, completionDate < start {
+                return false
+            }
+            
+            if let end = endDate, completionDate > end {
+                return false
+            }
+            
+            return true
+        }
+    }
+    
     /// Delete a reminder
     /// - Parameter id: The reminder identifier
     public func deleteReminder(id: String) throws {
@@ -125,6 +219,67 @@ public class ReminderManager {
         }
         
         try eventStore.remove(ekReminder, commit: true)
+    }
+    
+    /// Update an existing reminder
+    /// - Parameter input: The reminder update input
+    /// - Returns: The updated reminder
+    public func updateReminder(id: String, input: CreateReminderInput) throws -> Reminder {
+        guard let ekReminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
+            throw ReminderError.reminderNotFound(id)
+        }
+        
+        // Update title
+        ekReminder.title = input.title
+        
+        // Update notes with tags
+        if let tags = input.tags, !tags.isEmpty {
+            let tagString = tags.map { "[#\($0)]" }.joined(separator: " ")
+            if let notes = input.notes {
+                ekReminder.notes = "\(tagString)\n\(notes)"
+            } else {
+                ekReminder.notes = tagString
+            }
+        } else {
+            ekReminder.notes = input.notes
+        }
+        
+        // Update priority
+        if let priority = input.priority {
+            ekReminder.priority = max(0, min(9, priority))
+        }
+        
+        // Update due date
+        if let dueDateString = input.dueDate {
+            let date = try parseDateString(dueDateString)
+            ekReminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: date
+            )
+        } else {
+            ekReminder.dueDateComponents = nil
+        }
+        
+        // Update URL
+        if let urlString = input.url {
+            ekReminder.url = URL(string: urlString)
+        } else {
+            ekReminder.url = nil
+        }
+        
+        // Update list if specified
+        if let listName = input.listName {
+            if let calendar = bridge.findList(byName: listName) {
+                ekReminder.calendar = calendar
+            } else {
+                throw ReminderError.listNotFound(listName)
+            }
+        }
+        
+        // Save the reminder
+        try eventStore.save(ekReminder, commit: true)
+        
+        return Reminder(from: ekReminder)
     }
     
     /// Mark a reminder as complete
@@ -137,6 +292,22 @@ public class ReminderManager {
         
         ekReminder.isCompleted = true
         ekReminder.completionDate = Date()
+        
+        try eventStore.save(ekReminder, commit: true)
+        
+        return Reminder(from: ekReminder)
+    }
+    
+    /// Mark a reminder as incomplete
+    /// - Parameter id: The reminder identifier
+    /// - Returns: The updated reminder
+    public func uncompleteReminder(id: String) throws -> Reminder {
+        guard let ekReminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
+            throw ReminderError.reminderNotFound(id)
+        }
+        
+        ekReminder.isCompleted = false
+        ekReminder.completionDate = nil
         
         try eventStore.save(ekReminder, commit: true)
         
