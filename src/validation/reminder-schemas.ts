@@ -66,7 +66,8 @@ export const createReminderSchema = z.object({
     .int()
     .min(0, 'Priority must be between 0 and 9')
     .max(9, 'Priority must be between 0 and 9')
-    .optional(),
+    .optional()
+    .describe('Priority: 0=none, 1=high/urgent (!!!), 5=medium, 9=low'),
   flagged: z.boolean().optional(),
   url: z.string().url('URL must be a valid URL').optional(),
   tags: z.array(z.string()).optional(),

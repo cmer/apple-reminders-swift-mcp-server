@@ -31,7 +31,7 @@ export const updateReminderTool: Tool = {
       },
       priority: {
         type: 'number',
-        description: 'New priority (0-9)',
+        description: 'Priority: 0=none, 1=high/urgent (!!!), 5=medium, 9=low',
         minimum: 0,
         maximum: 9,
       },

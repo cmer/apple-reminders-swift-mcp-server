@@ -30,7 +30,7 @@ export const createReminderTool: Tool = {
       },
       priority: {
         type: 'number',
-        description: 'Priority: 0 (none), 1-4 (low), 5 (medium), 6-9 (high)',
+        description: 'Priority: 0=none, 1=high/urgent (!!!), 5=medium, 9=low',
         minimum: 0,
         maximum: 9,
       },
@@ -89,9 +89,10 @@ ${reminder.notes ? `\nNotes:\n${reminder.notes}` : ''}`;
  */
 function formatPriority(priority: number): string {
   if (priority === 0) return 'None';
-  if (priority >= 1 && priority <= 4) return 'Low';
+  if (priority === 1) return 'High (Urgent !!!)';
+  if (priority >= 2 && priority <= 4) return 'High';
   if (priority === 5) return 'Medium';
-  if (priority >= 6 && priority <= 9) return 'High';
+  if (priority >= 6 && priority <= 9) return 'Low';
   return 'None';
 }
 
