@@ -1,37 +1,36 @@
-# Apple Reminders MCP Server
+# Apple Reminders MCP Server v0.2.0
 
-A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS, enabling AI assistants like Claude to manage reminders using natural language.
+A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS, enabling AI assistants like Claude and Cursor AI to manage reminders using natural language.
+
+## 🎉 What's New in v0.2.0
+
+- ✅ **Full CRUD operations** (create, read, update, delete)
+- ✅ **Recurring reminders** (daily, weekly, monthly, yearly patterns)
+- ✅ **Location-based reminders** (geofence triggers for arriving/leaving)
+- ✅ **Multiple alarms** per reminder (absolute & relative)
+- ✅ **Search functionality** (text search in title and notes)
+- ✅ **Date-based queries** (today, overdue, completed)
+- ✅ **12 MCP tools** (up from 3 in v0.1.0)
 
 ## Features
 
 ✨ **Comprehensive Integration**
-- Create, read, update, and delete reminders
-- Manage reminder lists (calendars)
+- Full CRUD on reminders (create, read, update, delete, complete)
 - Search and filter reminders
+- Date-based queries (today, overdue, completed)
 - ~70% feature coverage of Apple Reminders
 
 🚀 **Powered by EventKit + Swift**
 - Native EventKit integration for best performance
-- Recurring reminders support
-- Location-based reminders
-- Multiple alarms per reminder
+- ✅ **Recurring reminders** (daily, weekly, monthly, custom)
+- ✅ **Location-based reminders** (arrive/depart triggers)
+- ✅ **Multiple alarms** per reminder
+- ✅ **Tag workarounds** (encoded in notes)
 
 🔒 **Privacy First**
 - All operations happen locally on your Mac
 - No cloud services or external APIs
 - Respects macOS permission system
-
-## Architecture
-
-```
-Claude Desktop (MCP Client)
-    ↓ MCP Protocol (stdio)
-TypeScript MCP Server
-    ↓ child_process + JSON
-Swift CLI Binary (EventKit)
-    ↓ EventKit Framework
-Apple Reminders.app
-```
 
 ## Prerequisites
 
@@ -41,20 +40,17 @@ Apple Reminders.app
 
 ## Quick Start
 
-### 1. Install Dependencies and Build
+### 1. Install & Build
 
 ```bash
+# Clone or download this repository
+cd apple-reminders-mcp-server
+
+# Run setup (installs dependencies and builds everything)
 npm run setup
 ```
 
-This will:
-- Install Node.js dependencies
-- Build the Swift CLI binary
-- Compile TypeScript to JavaScript
-
-### 2. Request Reminders Access
-
-The first time you use this server, you need to grant permission to access reminders:
+### 2. Request Permissions
 
 ```bash
 ./swift-cli/.build/release/reminders-cli request-access
@@ -62,17 +58,11 @@ The first time you use this server, you need to grant permission to access remin
 
 Grant permission in System Settings > Privacy & Security > Reminders.
 
-### 3. Test the Server (Optional)
+### 3. Configure Your AI Assistant
 
-Test the MCP server directly:
+#### For Claude Desktop
 
-```bash
-npm run dev
-```
-
-### 4. Configure Claude Desktop
-
-Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json` on macOS):
+Edit `~/.config/claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -85,31 +75,115 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 }
 ```
 
-Replace `/absolute/path/to/` with your actual project path.
+#### For Cursor AI
 
-### 5. Restart Claude Desktop
+Edit your Cursor MCP settings to add this server with the same configuration.
 
-Restart Claude Desktop to load the MCP server.
+### 4. Restart Your AI Assistant
 
-## Usage with Claude
+Restart Claude Desktop or Cursor to load the MCP server.
 
-Once configured, you can use natural language to manage reminders:
+## Available Tools (12 Total)
 
-**Examples:**
-- "Create a reminder to buy milk tomorrow at 5pm"
-- "Show me all my reminders"
-- "What reminder lists do I have?"
-- "Mark the 'buy milk' reminder as complete"
-- "Create a high-priority reminder to call mom with tags #family #important"
+### Reminder Management (6 tools)
+1. **`create_reminder`** - Create reminders with comprehensive attributes
+   - Basic: title, notes, due date, priority, tags, URL
+   - Advanced: recurring patterns, location triggers, multiple alarms
+   
+2. **`update_reminder`** - Update existing reminders
+   
+3. **`delete_reminder`** - Permanently delete reminders
+   
+4. **`complete_reminder`** - Mark reminder as complete
+   
+5. **`uncomplete_reminder`** - Mark reminder as incomplete
+   
+6. **`get_reminders`** - List all reminders (filter by completion)
 
-## Available Tools
+### List Management (1 tool)
+7. **`get_all_lists`** - Get all reminder lists
 
-### Reminder Management
-- `create_reminder` - Create a new reminder with comprehensive attributes
-- `get_reminders` - List all reminders (filter by completion status)
+### Search & Query (5 tools)
+8. **`search_reminders`** - Search by text in title/notes
+   
+9. **`get_todays_reminders`** - Get reminders due today
+   
+10. **`get_overdue_reminders`** - Get past-due reminders
+    
+11. **`get_completed_reminders`** - Get completed reminders (optional date range)
 
-### List Management
-- `get_all_lists` - Get all reminder lists
+## Usage Examples
+
+### Basic Reminders
+```
+"Create a reminder to buy milk"
+"Show me all my reminders"
+"Mark the milk reminder as complete"
+"Delete the milk reminder"
+```
+
+### Recurring Reminders
+```
+"Create a weekly reminder for team meeting every Monday at 10am"
+"Set up a daily reminder to take medication at 8am"
+"Create a monthly reminder on the 1st to pay rent"
+```
+
+### Location-Based Reminders
+```
+"Remind me to buy groceries when I arrive at the supermarket"
+"Create a reminder to call mom when I leave work"
+```
+
+### Search & Filters
+```
+"Search for reminders about meetings"
+"Show me today's reminders"
+"What reminders are overdue?"
+"Show me completed reminders from last week"
+```
+
+### Advanced Features
+```
+"Create a high-priority reminder with tags #work #urgent"
+"Set up a reminder with multiple alarms - 1 day before and 1 hour before"
+"Create a reminder that repeats every other week"
+```
+
+## Architecture
+
+```
+AI Assistant (Claude/Cursor)
+    ↓ MCP Protocol (stdio)
+TypeScript MCP Server (Node.js)
+    ↓ child_process + JSON
+Swift CLI Binary (EventKit)
+    ↓ EventKit Framework
+Apple Reminders.app
+```
+
+## Feature Coverage (~70%)
+
+### ✅ Fully Supported
+- **Core Operations**: Create, read, update, delete, complete
+- **Recurring Reminders**: Daily, weekly, monthly, yearly with custom rules
+- **Location Reminders**: Geofence triggers (arriving/leaving)
+- **Multiple Alarms**: Absolute (specific time) and relative (before due date)
+- **Search**: Text search in title and notes
+- **Date Queries**: Today, overdue, completed with date ranges
+- **Lists**: Get all lists, specify list for reminders
+- **Priority**: 0-9 scale (none, low, medium, high)
+- **Flagged Status**: Mark reminders as important
+- **Notes & URLs**: Rich text notes, associated URLs
+
+### ⚠️ Workarounds
+- **Tags**: Encoded as `[#tag]` in notes field (searchable)
+- **Subtasks**: Use structured notes or linked reminders
+
+### ❌ Not Supported (Private Apple APIs)
+- Native tags feature
+- Subtasks feature
+- Smart lists
 
 ## Development
 
@@ -120,157 +194,175 @@ apple-reminders-mcp-server/
 ├── swift-cli/              # Swift CLI (EventKit integration)
 │   ├── Sources/
 │   │   ├── RemindersKit/   # Core library
+│   │   │   ├── Models/     # Swift models
+│   │   │   └── *.swift     # Managers
 │   │   └── reminders-cli/  # CLI executable
 │   └── Package.swift
 ├── src/                    # TypeScript MCP Server
-│   ├── index.ts           # MCP server entry point
+│   ├── index.ts           # MCP server entry
 │   ├── executor/          # Swift CLI executor
-│   ├── tools/             # MCP tool handlers
+│   ├── tools/             # 12 MCP tool handlers
 │   ├── validation/        # Zod schemas
 │   └── types/             # TypeScript types
-├── scripts/               # Build scripts
 └── docs/                  # Documentation
 ```
 
 ### Development Commands
 
 ```bash
-# Install dependencies
-npm install
+# Build everything
+npm run build          # Build TypeScript
+npm run build:swift    # Build Swift CLI
 
-# Build Swift CLI
-npm run build:swift
+# Development mode
+npm run dev            # Watch mode for TypeScript
 
-# Build TypeScript
-npm run build
+# Testing
+npm test               # Run tests
+npm run lint           # Lint code
+npm run format         # Format code
 
-# Run in development mode (with hot reload)
-npm run dev
-
-# Run tests
-npm test
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-
-# Clean build artifacts
-npm run clean
+# Cleanup
+npm run clean          # Remove build artifacts
 ```
 
-### Building for Production
+### Building from Source
 
 ```bash
-# Build Swift CLI in release mode
+# Build Swift CLI (release mode)
 cd swift-cli
 swift build --configuration release
 
 # Build TypeScript
+cd ..
 npm run build
 ```
 
-The compiled binary will be at `swift-cli/.build/release/reminders-cli`.
+## Testing
 
-## Implementation Details
-
-### Swift CLI Commands
-
-The Swift CLI accepts JSON input and returns JSON output:
+### Test Swift CLI Directly
 
 ```bash
 # Create a reminder
-./reminders-cli create-reminder '{"title":"Buy milk","priority":5}'
+./swift-cli/.build/release/reminders-cli create-reminder '{"title":"Test","priority":5}'
 
-# List reminders
-./reminders-cli list-reminders '{"completed":false}'
+# Create recurring reminder
+./swift-cli/.build/release/reminders-cli create-reminder '{
+  "title":"Weekly Meeting",
+  "dueDate":"2026-01-13T10:00:00Z",
+  "recurrence":{"frequency":"weekly","interval":1}
+}'
 
-# Get all lists
-./reminders-cli get-all-lists
+# Search reminders
+./swift-cli/.build/release/reminders-cli search-reminders '{"searchText":"meeting"}'
+
+# Get today's reminders
+./swift-cli/.build/release/reminders-cli get-todays-reminders
 ```
 
-### EventKit Integration
+### Test with MCP Inspector
 
-This server uses Apple's EventKit framework for native access to reminders:
-- **EKEventStore** - Main interface to Calendar database
-- **EKReminder** - Reminder objects
-- **EKCalendar** - Reminder lists (calendars)
-- **EKRecurrenceRule** - Recurring reminder patterns
-- **EKStructuredLocation** - Location-based triggers
+```bash
+npx @modelcontextprotocol/inspector node dist/index.js
+```
 
-### Feature Coverage (~70%)
+## Advanced Features
 
-**Supported:**
-- ✅ Full CRUD operations
-- ✅ Lists management
-- ✅ Recurring reminders
-- ✅ Location-based reminders
-- ✅ Multiple alarms
-- ✅ Priority, flagged, due dates
-- ✅ Notes, URLs
+### Recurring Reminders
 
-**Not Supported** (Private Apple APIs):
-- ❌ Tags (workaround: encoded as `[#tag]` in notes)
-- ❌ Subtasks (workaround: structured notes or linked reminders)
-- ❌ Smart lists
+Create reminders that repeat on a schedule:
+
+```typescript
+{
+  "title": "Weekly team sync",
+  "dueDate": "2026-01-13T10:00:00Z",
+  "recurrence": {
+    "frequency": "weekly",    // daily, weekly, monthly, yearly
+    "interval": 1,            // every N weeks
+    "daysOfWeek": [2],        // Monday (1=Sunday, 7=Saturday)
+    "endDate": "2026-12-31T00:00:00Z"  // optional
+  }
+}
+```
+
+### Location-Based Reminders
+
+Trigger reminders based on location:
+
+```typescript
+{
+  "title": "Buy groceries",
+  "location": {
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "radius": 100,           // meters
+    "proximity": "enter",    // or "leave"
+    "title": "Whole Foods"
+  }
+}
+```
+
+### Multiple Alarms
+
+Add multiple notifications to a reminder:
+
+```typescript
+{
+  "title": "Important meeting",
+  "dueDate": "2026-01-15T14:00:00Z",
+  "alarms": [
+    {
+      "type": "relative",
+      "relativeOffset": -86400  // 1 day before (in seconds)
+    },
+    {
+      "type": "absolute",
+      "absoluteDate": "2026-01-15T13:00:00Z"  // 1 hour before
+    }
+  ]
+}
+```
 
 ## Troubleshooting
 
 ### Permission Denied
 
-If you get permission errors, ensure you've:
 1. Run `./swift-cli/.build/release/reminders-cli request-access`
-2. Granted permission in System Settings > Privacy & Security > Reminders
-3. Restarted Claude Desktop
+2. Grant permission in System Settings > Privacy & Security > Reminders
+3. Restart your AI assistant
 
 ### Swift CLI Not Found
 
-If the TypeScript server can't find the Swift CLI:
 1. Build the Swift CLI: `npm run build:swift`
-2. Verify the binary exists: `ls swift-cli/.build/release/reminders-cli`
-3. Check the path in `src/executor/swift-executor.ts`
+2. Verify: `ls swift-cli/.build/release/reminders-cli`
 
-### Build Errors
+### Tool Not Working
 
-For Swift build errors:
-```bash
-cd swift-cli
-swift build --configuration release
-```
-
-For TypeScript errors:
-```bash
-npm run type-check
-```
+1. Check Swift CLI directly with test JSON
+2. Check MCP server logs in your AI assistant
+3. Use MCP Inspector for isolated debugging
 
 ## Roadmap
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed implementation plan.
+### ✅ Completed
+- [x] Full CRUD operations
+- [x] Search and filters
+- [x] Date-based queries
+- [x] Recurring reminders
+- [x] Location-based reminders
+- [x] Multiple alarms
 
-**Phase 1: Foundation** ✅
-- [x] Swift CLI with EventKit
-- [x] TypeScript MCP server
-- [x] Basic tools (create, list)
-
-**Phase 2: Core Features** (In Progress)
-- [ ] Update and delete tools
-- [ ] Complete/uncomplete tools
-- [ ] Search and filter tools
-
-**Phase 3: Advanced Features**
-- [ ] Recurring reminders
-- [ ] Location-based reminders
+### 🔄 Future Enhancements
+- [ ] List management (create, update, delete lists)
 - [ ] Batch operations
-
-**Phase 4: Polish**
-- [ ] Full test coverage
-- [ ] Pre-compiled binaries
-- [ ] Distribution setup
+- [ ] Rich error messages with suggestions
+- [ ] Performance optimization
+- [ ] Pre-compiled binaries for distribution
+- [ ] npm package publication
 
 ## Contributing
 
-This is a learning project. Contributions welcome!
+This is a learning project. Contributions, issues, and feature requests are welcome!
 
 ## License
 
@@ -280,9 +372,10 @@ MIT
 
 - [MCP Documentation](https://modelcontextprotocol.io/)
 - [EventKit Documentation](https://developer.apple.com/documentation/eventkit)
-- [FradSer's mcp-server-apple-events](https://github.com/FradSer/mcp-server-apple-events) - Inspiration for architecture
+- [FradSer's mcp-server-apple-events](https://github.com/FradSer/mcp-server-apple-events)
 
 ---
 
 **Built with ❤️ for the MCP ecosystem**
 
+Version 0.2.0 | Updated January 2026
