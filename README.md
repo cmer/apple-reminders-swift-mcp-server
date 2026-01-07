@@ -181,6 +181,12 @@ Apple Reminders.app
 - **Tags**: Encoded as `[#tag]` in notes field (searchable)
 - **Subtasks**: Use structured notes or linked reminders
 
+### ⚠️ API Limitations (Not Yet Available in EventKit)
+- **Urgent Alarms** (macOS 26.2+): The new "Urgent" alarm feature is NOT exposed in EventKit API
+  - Workaround: Use `priority: 1` + `flagged: true` + regular alarms
+  - See `URGENT_FEATURE_STATUS.md` for details
+- Apple has not announced when/if EventKit will support this feature
+
 ### ❌ Not Supported (Private Apple APIs)
 - Native tags feature
 - Subtasks feature
