@@ -87,6 +87,9 @@ class CommandRouter {
             let flagged: Bool?
             let url: String?
             let tags: [String]?
+            let recurrence: RecurrenceRule?
+            let location: ReminderLocation?
+            let alarms: [ReminderAlarm]?
         }
         
         let input = try decodeInput(UpdateReminderInput.self, from: jsonInput)
@@ -98,7 +101,10 @@ class CommandRouter {
             priority: input.priority,
             flagged: input.flagged,
             url: input.url,
-            tags: input.tags
+            tags: input.tags,
+            recurrence: input.recurrence,
+            location: input.location,
+            alarms: input.alarms
         )
         let reminder = try reminderManager.updateReminder(id: input.id, input: updateInput)
         let response = CLIResponse(success: true, data: reminder)
