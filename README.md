@@ -15,12 +15,14 @@ A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS
 ## Features
 
 ✨ **Comprehensive Integration**
+
 - Full CRUD on reminders (create, read, update, delete, complete)
 - Search and filter reminders
 - Date-based queries (today, overdue, completed)
 - ~70% feature coverage of Apple Reminders
 
 🚀 **Powered by EventKit + Swift**
+
 - Native EventKit integration for best performance
 - ✅ **Recurring reminders** (daily, weekly, monthly, custom)
 - ✅ **Location-based reminders** (arrive/depart triggers)
@@ -28,6 +30,7 @@ A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS
 - ✅ **Tag workarounds** (encoded in notes)
 
 🔒 **Privacy First**
+
 - All operations happen locally on your Mac
 - No cloud services or external APIs
 - Respects macOS permission system
@@ -86,35 +89,31 @@ Restart Claude Desktop or Cursor to load the MCP server.
 ## Available Tools (12 Total)
 
 ### Reminder Management (6 tools)
+
 1. **`create_reminder`** - Create reminders with comprehensive attributes
    - Basic: title, notes, due date, priority, tags, URL
    - Advanced: recurring patterns, location triggers, multiple alarms
-   
 2. **`update_reminder`** - Update existing reminders
-   
 3. **`delete_reminder`** - Permanently delete reminders
-   
 4. **`complete_reminder`** - Mark reminder as complete
-   
 5. **`uncomplete_reminder`** - Mark reminder as incomplete
-   
 6. **`get_reminders`** - List all reminders (filter by completion)
 
 ### List Management (1 tool)
+
 7. **`get_all_lists`** - Get all reminder lists
 
 ### Search & Query (5 tools)
+
 8. **`search_reminders`** - Search by text in title/notes
-   
 9. **`get_todays_reminders`** - Get reminders due today
-   
 10. **`get_overdue_reminders`** - Get past-due reminders
-    
 11. **`get_completed_reminders`** - Get completed reminders (optional date range)
 
 ## Usage Examples
 
 ### Basic Reminders
+
 ```
 "Create a reminder to buy milk"
 "Show me all my reminders"
@@ -123,6 +122,7 @@ Restart Claude Desktop or Cursor to load the MCP server.
 ```
 
 ### Recurring Reminders
+
 ```
 "Create a weekly reminder for team meeting every Monday at 10am"
 "Set up a daily reminder to take medication at 8am"
@@ -130,12 +130,14 @@ Restart Claude Desktop or Cursor to load the MCP server.
 ```
 
 ### Location-Based Reminders
+
 ```
 "Remind me to buy groceries when I arrive at the supermarket"
 "Create a reminder to call mom when I leave work"
 ```
 
 ### Search & Filters
+
 ```
 "Search for reminders about meetings"
 "Show me today's reminders"
@@ -144,6 +146,7 @@ Restart Claude Desktop or Cursor to load the MCP server.
 ```
 
 ### Advanced Features
+
 ```
 ""Create an URGENT reminder with priority 1 to call the client"
 "Create a high-priority reminder with tags #work #urgent""
@@ -168,6 +171,7 @@ Apple Reminders.app
 This project uses Apple's **EventKit framework** via a Swift CLI, rather than the simpler JXA (JavaScript for Automation) approach. Here's why:
 
 **JXA Limitations** (POC tested and documented):
+
 - ❌ No support for **recurring reminders** (daily, weekly, monthly patterns)
 - ❌ No support for **location-based reminders** (geofencing)
 - ❌ No access to **tags** (would require text workarounds)
@@ -176,6 +180,7 @@ This project uses Apple's **EventKit framework** via a Swift CLI, rather than th
 - ❌ JXA is essentially abandoned by Apple (no updates since 2014)
 
 **EventKit Advantages**:
+
 - ✅ Full access to **70%+ of Reminders features** via official Apple API
 - ✅ Native support for **recurring reminders** with complex rules
 - ✅ Native support for **location triggers** (arrive/depart)
@@ -188,6 +193,7 @@ This project uses Apple's **EventKit framework** via a Swift CLI, rather than th
 ## Feature Coverage (~70%)
 
 ### ✅ Fully Supported
+
 - **Core Operations**: Create, read, update, delete, complete
 - **Recurring Reminders**: Daily, weekly, monthly, yearly with custom rules
 - **Location Reminders**: Geofence triggers (arriving/leaving)
@@ -200,16 +206,19 @@ This project uses Apple's **EventKit framework** via a Swift CLI, rather than th
 - **Notes & URLs**: Rich text notes, associated URLs
 
 ### ⚠️ Workarounds
+
 - **Tags**: Encoded as `[#tag]` in notes field (searchable)
 - **Subtasks**: Use structured notes or linked reminders
 
 ### ⚠️ API Limitations (Not Yet Available in EventKit)
+
 - **Urgent Alarms** (macOS 26.2+): The new "Urgent" alarm feature is NOT exposed in EventKit API
   - Workaround: Use `priority: 1` + `flagged: true` + regular alarms
   - See `URGENT_FEATURE_STATUS.md` for details
 - Apple has not announced when/if EventKit will support this feature
 
 ### ❌ Not Supported (Private Apple APIs)
+
 - Native tags feature
 - Subtasks feature
 - Smart lists
@@ -374,6 +383,7 @@ Add multiple notifications to a reminder:
 ## Roadmap
 
 ### ✅ Completed
+
 - [x] Full CRUD operations
 - [x] Search and filters
 - [x] Date-based queries
@@ -382,6 +392,7 @@ Add multiple notifications to a reminder:
 - [x] Multiple alarms
 
 ### 🔄 Future Enhancements
+
 - [ ] List management (create, update, delete lists)
 - [ ] Batch operations
 - [ ] Rich error messages with suggestions
