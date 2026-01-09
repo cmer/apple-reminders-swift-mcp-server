@@ -1,12 +1,20 @@
 {
   "name": "apple-reminders-mcp-server",
-  "version": "0.1.0",
-  "description": "MCP server for Apple Reminders integration using EventKit + Swift",
+  "version": "0.2.0",
+  "description": "A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS with full CRUD operations, recurring reminders, location triggers, and more",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "apple-reminders-mcp": "dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krishnadesiraju/apple-reminders-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/krishnadesiraju/apple-reminders-mcp-server/issues"
+  },
+  "homepage": "https://github.com/krishnadesiraju/apple-reminders-mcp-server#readme",
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
     "dev": "tsx watch src/index.ts",
@@ -33,7 +41,7 @@
     "ai",
     "claude"
   ],
-  "author": "",
+  "author": "Krishna Desiraju",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
