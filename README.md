@@ -163,6 +163,28 @@ Swift CLI Binary (EventKit)
 Apple Reminders.app
 ```
 
+### Why EventKit + Swift?
+
+This project uses Apple's **EventKit framework** via a Swift CLI, rather than the simpler JXA (JavaScript for Automation) approach. Here's why:
+
+**JXA Limitations** (POC tested and documented):
+- ❌ No support for **recurring reminders** (daily, weekly, monthly patterns)
+- ❌ No support for **location-based reminders** (geofencing)
+- ❌ No access to **tags** (would require text workarounds)
+- ❌ No support for **subtasks** (not exposed in API)
+- ❌ **Multiple alarms** not accessible
+- ❌ JXA is essentially abandoned by Apple (no updates since 2014)
+
+**EventKit Advantages**:
+- ✅ Full access to **70%+ of Reminders features** via official Apple API
+- ✅ Native support for **recurring reminders** with complex rules
+- ✅ Native support for **location triggers** (arrive/depart)
+- ✅ Native support for **multiple alarms** per reminder
+- ✅ **Actively maintained** by Apple with new macOS releases
+- ✅ Better **performance** and **reliability**
+
+**Trade-off**: EventKit requires Swift compilation, but the benefits far outweigh the minimal additional setup complexity. The Swift CLI is built once during installation and provides access to nearly all Reminders features that are publicly available.
+
 ## Feature Coverage (~70%)
 
 ### ✅ Fully Supported

@@ -30,3 +30,6 @@ swift-cli/.swiftpm/
 coverage/
 .nyc_output/
 
+# Development artifacts
+archive/
+docs/api/
