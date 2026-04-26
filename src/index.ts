@@ -30,6 +30,7 @@ import {
   getCompletedRemindersTool,
   getCompletedRemindersHandler,
 } from './tools/search/date-based-reminders.js';
+import { requestAccessTool, requestAccessHandler } from './tools/system/request-access.js';
 
 /**
  * Create and configure the MCP server
@@ -70,6 +71,9 @@ async function main() {
       getTodaysRemindersTool,
       getOverdueRemindersTool,
       getCompletedRemindersTool,
+
+      // System
+      requestAccessTool,
     ],
   }));
 
@@ -111,6 +115,9 @@ async function main() {
 
         case 'get_completed_reminders':
           return await getCompletedRemindersHandler(args, swiftExecutor);
+
+        case 'request_access':
+          return await requestAccessHandler(args, swiftExecutor);
 
         default:
           throw new MCPError(MCPErrorCode.INVALID_INPUT, `Unknown tool: ${name}`);
