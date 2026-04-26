@@ -1,10 +1,48 @@
 import { execSync } from 'child_process';
+import { chmodSync, constants, existsSync, readdirSync, statSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { MCPError, MCPErrorCode, mapSwiftErrorCode, SwiftCLIError } from '../types/error.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Resolve the Swift CLI binary path.
+ *
+ * Some install/packaging flows (e.g. Claude Desktop's extension installer) strip
+ * the `.build/release` symlink that `swift build` creates, and may also drop the
+ * binary's exec bit. Fall back to the architecture-specific output dir and
+ * restore exec permissions so the executor keeps working without a rebuild.
+ */
+function resolveCliPath(defaultPath: string): string {
+  const candidates: string[] = [defaultPath];
+
+  if (!existsSync(defaultPath)) {
+    const buildDir = path.dirname(path.dirname(defaultPath));
+    if (existsSync(buildDir)) {
+      for (const entry of readdirSync(buildDir)) {
+        const candidate = path.join(buildDir, entry, 'release', 'reminders-cli');
+        if (existsSync(candidate)) candidates.push(candidate);
+      }
+    }
+  }
+
+  const resolved = candidates.find((p) => existsSync(p)) ?? defaultPath;
+
+  if (existsSync(resolved)) {
+    const mode = statSync(resolved).mode;
+    if (!(mode & constants.S_IXUSR)) {
+      try {
+        chmodSync(resolved, mode | constants.S_IXUSR | constants.S_IXGRP | constants.S_IXOTH);
+      } catch {
+        // best-effort; execSync will surface a clearer error if it still can't run
+      }
+    }
+  }
+
+  return resolved;
+}
 
 /**
  * Swift CLI response structure
@@ -31,9 +69,9 @@ export class SwiftExecutor {
   private timeout: number;
 
   constructor(options: SwiftExecutorOptions = {}) {
-    // Default to release build for better performance
-    this.cliPath =
+    const defaultPath =
       options.cliPath || path.join(__dirname, '../../swift-cli/.build/release/reminders-cli');
+    this.cliPath = resolveCliPath(defaultPath);
     this.timeout = options.timeout || 30000; // 30 seconds default
   }
 
