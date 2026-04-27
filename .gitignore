@@ -8,6 +8,7 @@ npm-debug.log*
 # Swift
 swift-cli/.build/
 swift-cli/.swiftpm/
+swift-cli/RemindersCLI.app/
 *.xcodeproj
 *.xcworkspace
 *.dSYM.zip
