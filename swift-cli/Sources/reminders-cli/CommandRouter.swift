@@ -33,6 +33,12 @@ class CommandRouter {
             return try await handleDeleteReminder(jsonInput: jsonInput)
         case "get-all-lists":
             return try handleGetAllLists()
+        case "create-list":
+            return try handleCreateList(jsonInput: jsonInput)
+        case "update-list":
+            return try handleUpdateList(jsonInput: jsonInput)
+        case "delete-list":
+            return try await handleDeleteList(jsonInput: jsonInput)
         default:
             throw CLIError(
                 code: "UNKNOWN_COMMAND",
@@ -153,6 +159,32 @@ class CommandRouter {
     private func handleGetAllLists() throws -> String {
         let lists = listManager.getAllLists()
         let response = CLIResponse(success: true, data: lists)
+        return try encodeResponse(response)
+    }
+    
+    private func handleCreateList(jsonInput: String) throws -> String {
+        let input = try decodeInput(CreateListInput.self, from: jsonInput)
+        let list = try listManager.createList(input: input)
+        let response = CLIResponse(success: true, data: list)
+        return try encodeResponse(response)
+    }
+    
+    private func handleUpdateList(jsonInput: String) throws -> String {
+        let input = try decodeInput(UpdateListInput.self, from: jsonInput)
+        let list = try listManager.updateList(input: input)
+        let response = CLIResponse(success: true, data: list)
+        return try encodeResponse(response)
+    }
+    
+    private func handleDeleteList(jsonInput: String) async throws -> String {
+        struct DeleteListInput: Codable {
+            let id: String?
+            let name: String?
+        }
+        
+        let input = try decodeInput(DeleteListInput.self, from: jsonInput)
+        let result = try await listManager.deleteList(id: input.id, name: input.name)
+        let response = CLIResponse(success: true, data: result)
         return try encodeResponse(response)
     }
     

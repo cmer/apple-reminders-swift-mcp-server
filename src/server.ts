@@ -18,6 +18,9 @@ import {
 } from './tools/reminders/complete-reminder.js';
 import { getRemindersListTool, getRemindersListHandler } from './tools/reminders/get-reminders.js';
 import { getAllListsTool, getAllListsHandler } from './tools/lists/get-all-lists.js';
+import { createListTool, createListHandler } from './tools/lists/create-list.js';
+import { updateListTool, updateListHandler } from './tools/lists/update-list.js';
+import { deleteListTool, deleteListHandler } from './tools/lists/delete-list.js';
 import { searchRemindersTool, searchRemindersHandler } from './tools/search/search-reminders.js';
 import {
   getTodaysRemindersTool,
@@ -61,6 +64,9 @@ export function createServer(swiftExecutor: SwiftExecutor): Server {
       
       // Lists
       getAllListsTool,
+      createListTool,
+      updateListTool,
+      deleteListTool,
       
       // Search
       searchRemindersTool,
@@ -99,6 +105,15 @@ export function createServer(swiftExecutor: SwiftExecutor): Server {
 
         case 'get_all_lists':
           return await getAllListsHandler(args, swiftExecutor);
+
+        case 'create_list':
+          return await createListHandler(args, swiftExecutor);
+
+        case 'update_list':
+          return await updateListHandler(args, swiftExecutor);
+
+        case 'delete_list':
+          return await deleteListHandler(args, swiftExecutor);
 
         case 'search_reminders':
           return await searchRemindersHandler(args, swiftExecutor);

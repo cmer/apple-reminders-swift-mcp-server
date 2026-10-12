@@ -189,7 +189,7 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 - **No TLS.** Traffic, including the token, is plain HTTP. That's fine on a trusted home or office LAN, but anyone who can sniff the network can read it. Don't expose the port to the internet; if you need access from outside your LAN, put it behind a VPN such as Tailscale or a TLS-terminating reverse proxy.
 - **Full access.** Anyone holding the token can read, create, and delete your reminders. Rotate it with `reminders-mcp rotate-token`, or by generating a new one and restarting the server.
 
-## Available Tools (12 Total)
+## Available Tools (15 Total)
 
 ### Reminder Management (6 tools)
 
@@ -202,20 +202,25 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 5. **`uncomplete_reminder`** - Mark reminder as incomplete
 6. **`get_reminders`** - List all reminders (filter by completion)
 
-### List Management (1 tool)
+### List Management (4 tools)
 
-7. **`get_all_lists`** - Get all reminder lists
+7. **`get_all_lists`** - Get all reminder lists, with their account and ID
+8. **`create_list`** - Create a list, with optional hex color and account (defaults to the account of your default list, usually iCloud)
+9. **`update_list`** - Rename or recolor a list
+10. **`delete_list`** - Delete a list **and every reminder in it**
+
+`update_list` and `delete_list` take either an `id` or a `name`. If two lists share a name, the call fails and asks for the ID. Read-only lists (e.g. subscribed or shared lists you can't edit) can't be changed.
 
 ### Search & Query (4 tools)
 
-8. **`search_reminders`** - Search by text in title/notes
-9. **`get_todays_reminders`** - Get reminders due today
-10. **`get_overdue_reminders`** - Get past-due reminders
-11. **`get_completed_reminders`** - Get completed reminders (optional date range)
+11. **`search_reminders`** - Search by text in title/notes
+12. **`get_todays_reminders`** - Get reminders due today
+13. **`get_overdue_reminders`** - Get past-due reminders
+14. **`get_completed_reminders`** - Get completed reminders (optional date range)
 
 ### System (1 tool)
 
-12. **`request_access`** - Trigger the macOS Reminders permission prompt. Call once before other tools if access has not yet been granted.
+15. **`request_access`** - Trigger the macOS Reminders permission prompt. Call once before other tools if access has not yet been granted.
 
 ## Usage Examples
 
@@ -226,6 +231,14 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 "Show me all my reminders"
 "Mark the milk reminder as complete"
 "Delete the milk reminder"
+```
+
+### Lists
+
+```
+"Create a list called Groceries"
+"Rename my Groceries list to Shopping and make it green"
+"Delete the Old Projects list"
 ```
 
 ### Recurring Reminders
@@ -309,7 +322,7 @@ This project uses Apple's **EventKit framework** via a Swift CLI, rather than th
 - **Multiple Alarms**: Absolute (specific time) and relative (before due date)
 - **Search**: Text search in title and notes
 - **Date Queries**: Today, overdue, completed with date ranges
-- **Lists**: Get all lists, specify list for reminders
+- **Lists**: Create, rename, recolor, and delete lists; specify list for reminders
 - **Priority**: 0=none, 1=urgent (!!!), 5=medium, 9=low
 - **Flagged Status**: Mark reminders as important (flag icon)
 - **Notes & URLs**: Rich text notes, associated URLs
@@ -354,7 +367,7 @@ apple-reminders-mcp-server/
 │   ├── http-server.ts     # Token-protected Streamable HTTP transport
 │   ├── executor/          # Swift CLI executor (launches via `open` when
 │   │                      #   RemindersCLI.app is present)
-│   ├── tools/             # 12 MCP tool handlers
+│   ├── tools/             # 15 MCP tool handlers
 │   ├── validation/        # Zod schemas
 │   └── types/             # TypeScript types
 └── docs/                  # Documentation
@@ -411,6 +424,11 @@ npm run build
 
 # Get today's reminders
 ./swift-cli/.build/release/reminders-cli get-todays-reminders
+
+# Create, rename, and delete a list
+./swift-cli/.build/release/reminders-cli create-list '{"name":"Groceries","color":"#34C759"}'
+./swift-cli/.build/release/reminders-cli update-list '{"name":"Groceries","newName":"Shopping"}'
+./swift-cli/.build/release/reminders-cli delete-list '{"name":"Shopping"}'
 ```
 
 ### Test with MCP Inspector
@@ -509,10 +527,10 @@ To start over with permissions for just this tool: `tccutil reset Reminders com.
 - [x] Recurring reminders
 - [x] Location-based reminders
 - [x] Multiple alarms
+- [x] List management (create, update, delete lists)
 
 ### 🔄 Future Enhancements
 
-- [ ] List management (create, update, delete lists)
 - [ ] Batch operations
 - [ ] Rich error messages with suggestions
 - [ ] Performance optimization

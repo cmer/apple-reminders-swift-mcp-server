@@ -342,6 +342,10 @@ public enum ReminderError: Error, CustomStringConvertible {
     case reminderNotFound(String)
     case invalidDateFormat(String)
     case permissionDenied
+    case ambiguousList(String, Int)
+    case listNotModifiable(String)
+    case sourceNotFound(String)
+    case invalidInput(String)
     
     public var description: String {
         switch self {
@@ -355,6 +359,14 @@ public enum ReminderError: Error, CustomStringConvertible {
             return "Invalid date format: \(format). Expected ISO 8601."
         case .permissionDenied:
             return "Permission denied to access reminders"
+        case .ambiguousList(let name, let count):
+            return "\(count) lists are named \"\(name)\". Use the list ID instead."
+        case .listNotModifiable(let name):
+            return "List cannot be modified: \(name)"
+        case .sourceNotFound(let name):
+            return "Account not found: \(name)"
+        case .invalidInput(let message):
+            return message
         }
     }
 }
