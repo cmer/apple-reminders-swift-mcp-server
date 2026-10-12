@@ -158,7 +158,7 @@ Every request must carry the token as `Authorization: Bearer <token>`.
 **Claude Code:**
 
 ```bash
-claude mcp add --transport http apple-reminders http://my-mac.local:3847/mcp \
+claude mcp add --transport http --scope user apple-reminders http://my-mac.local:3847/mcp \
   --header "Authorization: Bearer <token>"
 ```
 

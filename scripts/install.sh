@@ -8,7 +8,9 @@
 # After installing, the `reminders-mcp` command runs this script (for example
 # `reminders-mcp token` or `reminders-mcp update`). See --help.
 
-set -euo pipefail
+set -Eeuo pipefail
+# Never exit silently: report where an unexpected failure happened.
+trap 'printf "\033[31mError:\033[0m installer stopped unexpectedly (line %s, exit %s)\n" "$LINENO" "$?" >&2' ERR
 
 DEFAULT_REPO="https://github.com/cmer/apple-reminders-swift-mcp-server.git"
 DEFAULT_REF="main"
@@ -310,17 +312,31 @@ health_check() {
 
 # Launch the bundle the same way the server does, so the macOS permission
 # prompt is attributed to RemindersCLI.app. Returns quickly when access was
-# already granted; otherwise waits for the user to answer the prompt.
+# already granted; otherwise waits (up to ACCESS_TIMEOUT) for the user to
+# answer the prompt.
+ACCESS_TIMEOUT=180
+
 request_access() {
-  local out
+  local out pid waited=0
   out="$(mktemp -d)"
   say "Checking Reminders permission (approve the macOS prompt if one appears)"
   open -W -n -a "$CURRENT/swift-cli/RemindersCLI.app" \
-    --stdout "$out/stdout" --stderr "$out/stderr" --args request-access 2>/dev/null || true
+    --stdout "$out/stdout" --stderr "$out/stderr" --args request-access 2>/dev/null &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge "$ACCESS_TIMEOUT" ]; then
+      kill "$pid" 2>/dev/null || true
+      break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid" 2>/dev/null || true
+
   if grep -q '"granted" *: *true' "$out/stdout" 2>/dev/null; then
     say "Reminders access granted"
   else
-    warn "Reminders access was not granted. Enable RemindersCLI in System Settings > Privacy & Security > Reminders, then rerun this script."
+    warn "Reminders access was not granted. Enable RemindersCLI in System Settings > Privacy & Security > Reminders, then run: $CLI_NAME update"
   fi
   rm -rf "$out"
 }
@@ -345,50 +361,83 @@ cli_on_path() {
 
 # --- Output -------------------------------------------------------------------
 
+# One URL per line, best first: the Bonjour name, then each interface's IP.
 lan_urls() {
   case "$HOST" in
     0.0.0.0 | ::) ;;
     *)
-      printf '  http://%s:%s/mcp\n' "$HOST" "$PORT"
-      return
+      printf 'http://%s:%s/mcp\n' "$HOST" "$PORT"
+      return 0
       ;;
   esac
   local name iface ip
   name="$(scutil --get LocalHostName 2>/dev/null || true)"
-  [ -n "$name" ] && printf '  http://%s.local:%s/mcp\n' "$name" "$PORT"
+  if [ -n "$name" ]; then
+    printf 'http://%s.local:%s/mcp\n' "$name" "$PORT"
+  fi
   for iface in $(ifconfig -l); do
     ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
-    [ -n "$ip" ] && printf '  http://%s:%s/mcp\n' "$ip" "$PORT"
+    if [ -n "$ip" ]; then
+      printf 'http://%s:%s/mcp\n' "$ip" "$PORT"
+    fi
   done
   return 0
 }
 
+# Copy to the clipboard when running in a terminal, so `status > file` or a
+# script calling us doesn't clobber it.
+copy_to_clipboard() {
+  [ -t 1 ] && command -v pbcopy >/dev/null 2>&1 || return 1
+  printf '%s' "$1" | pbcopy
+}
+
 print_connection_info() {
-  local token url
+  local token urls url others command bold reset
   token="$(cat "$TOKEN_FILE")"
-  url="$(lan_urls | head -1 | tr -d ' ')"
+  urls="$(lan_urls)"
+  url="${urls%%$'\n'*}"
+  others="$(printf '%s\n' "$urls" | sed 1d)"
+  command="claude mcp add --transport http --scope user apple-reminders $url --header \"Authorization: Bearer $token\""
+  bold=$'\033[1m'
+  reset=$'\033[0m'
+
   cat <<EOF
 
-Server URLs:
-$(lan_urls)
+${bold}Add it to Claude Code${reset}
 
-Token:
-  $token
+On any machine on your network, run:
 
-Connect from Claude Code:
-  claude mcp add --transport http apple-reminders $url \\
-    --header "Authorization: Bearer $token"
+  $command
 
-Show the token again any time:
-  $CLI_NAME token
+Then start Claude Code and run /mcp; apple-reminders should show as connected.
+EOF
+  if copy_to_clipboard "$command"; then
+    echo "(The command is on your clipboard.)"
+  fi
 
-Logs: $LOG_FILE
-If macOS asks whether node may accept incoming connections, click Allow.
+  cat <<EOF
+
+${bold}Token${reset}       $token
+${bold}Server URL${reset}  $url
+EOF
+  if [ -n "$others" ]; then
+    echo
+    echo "If $url doesn't resolve from another machine, use one of these instead:"
+    printf '%s\n' "$others" | sed 's/^/  /'
+  fi
+
+  cat <<EOF
+
+Show the token again any time:  $CLI_NAME token
+Logs:                           $LOG_FILE
+
+The first time a client connects, macOS may ask whether node can accept
+incoming connections. Click Allow.
 EOF
   if ! cli_on_path; then
     cat <<EOF
 
-$BIN_DIR isn't on your PATH, so add it to use the $CLI_NAME command:
+$BIN_DIR isn't on your PATH. Add it to use the $CLI_NAME command:
   echo 'export PATH="$BIN_DIR:\$PATH"' >> ~/.zshrc
 Or run it directly: $CLI_LINK token
 EOF
@@ -445,8 +494,10 @@ cmd_install() {
 cmd_status() {
   [ -f "$PLIST" ] || die "Not installed."
   local state pid
-  state="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null | awk -F' = ' '/^\tstate/ {print $2; exit}')"
-  pid="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null | awk -F' = ' '/^\tpid/ {print $2; exit}')"
+  local info
+  info="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null || true)"
+  state="$(awk -F' = ' '/^\tstate/ {print $2; exit}' <<<"$info")"
+  pid="$(awk -F' = ' '/^\tpid/ {print $2; exit}' <<<"$info")"
 
   echo "Service:  ${state:-not loaded}${pid:+ (pid $pid)}"
   echo "Version:  $(current_sha) ($REF from $REPO)"
