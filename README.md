@@ -59,7 +59,7 @@ npm run setup
 The build produces a small `RemindersCLI.app` wrapper around the Swift binary. Launch the wrapper to trigger the macOS permission prompt and click **Allow**:
 
 ```bash
-open -W -n -a ./swift-cli/RemindersCLI.app --args request-access
+open -W -n -a "$PWD/swift-cli/RemindersCLI.app" --args request-access
 ```
 
 If you've previously denied access, grant it manually in System Settings > Privacy & Security > Reminders (look for **RemindersCLI**).
@@ -498,7 +498,7 @@ Add multiple notifications to a reminder:
 
 ### Permission Denied
 
-1. Run `open -W -n -a ./swift-cli/RemindersCLI.app --args request-access` and click **Allow** on the prompt.
+1. From the repository root, run `open -W -n -a "$PWD/swift-cli/RemindersCLI.app" --args request-access` and click **Allow** on the prompt.
 2. If you've previously denied: open System Settings > Privacy & Security > Reminders and enable **RemindersCLI**.
 3. Restart your AI assistant.
 
