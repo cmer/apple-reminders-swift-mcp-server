@@ -34,6 +34,7 @@ A comprehensive Model Context Protocol (MCP) server for Apple Reminders on macOS
 - All operations happen locally on your Mac
 - No cloud services or external APIs
 - Respects macOS permission system
+- Optional token-protected HTTP mode for access from other machines on your LAN
 
 ## Prerequisites
 
@@ -89,6 +90,104 @@ Edit your Cursor MCP settings to add this server with the same configuration.
 ### 4. Restart Your AI Assistant
 
 Restart Claude Desktop or Cursor to load the MCP server.
+
+## Remote Access over HTTP
+
+By default the server speaks MCP over stdio, so only an AI assistant on the same Mac can use it. HTTP mode serves the same tools over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) so assistants on other machines on your network can reach your reminders. The server still runs on the Mac that owns the reminders; only the MCP traffic goes over the network.
+
+### Install as a service
+
+The install script sets everything up as a background service that starts at login and restarts if it crashes:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cmer/apple-reminders-swift-mcp-server/main/scripts/install.sh | bash
+```
+
+It checks for Node.js 18+, git and the Xcode Command Line Tools, then:
+
+1. Clones the latest `main` into `~/Library/Application Support/apple-reminders-mcp` and builds it.
+2. Generates an access token and saves it to a file only you can read.
+3. Registers a LaunchAgent (`~/Library/LaunchAgents/local.apple-reminders-mcp.plist`) that runs the server in HTTP mode.
+4. Checks that the server responds, then asks macOS for Reminders access. Approve the prompt if one appears.
+5. Installs a `reminders-mcp` command in `~/.local/bin` for managing the service later.
+6. Prints the server URLs, the token, and the command to connect Claude Code.
+
+**To update, run `reminders-mcp update`** (or the curl command again). It fetches the latest commit, rebuilds, and restarts the service. If the new version fails to start, it rolls back to the previous one. The token and your settings are kept. The Swift CLI is only rebuilt when its sources change, because each rebuild changes its signature and macOS would ask for Reminders permission again.
+
+Other commands:
+
+```bash
+reminders-mcp token              # Print the token (reminders-mcp token | pbcopy to copy it)
+reminders-mcp status             # Service state, version, URLs, and token
+reminders-mcp rotate-token       # New token; old one stops working immediately
+reminders-mcp uninstall          # Stop the service and delete everything it installed
+reminders-mcp update --port 4000 # Change settings (saved for future updates)
+```
+
+If `~/.local/bin` isn't on your PATH, the installer tells you how to add it. You can also run the script from a checkout as `./scripts/install.sh`; either way it installs from GitHub, not from the checkout.
+
+`--host`, `--port`, `--ref` (branch or tag to track), and `--repo` are remembered between runs. When piping from curl, pass options with `bash -s -- --port 4000`. Logs go to `~/Library/Logs/local.apple-reminders-mcp.log`.
+
+The first time a remote client connects, macOS may ask whether `node` can accept incoming connections. Click Allow.
+
+### Run it manually
+
+Generate a token, then start the server with it:
+
+```bash
+node dist/index.js --generate-token
+REMINDERS_MCP_TOKEN=<token> node dist/index.js --http
+# Apple Reminders MCP Server listening on http://0.0.0.0:3847/mcp
+```
+
+| Flag | Environment variable | Default |
+|------|----------------------|---------|
+| `--http` | `REMINDERS_MCP_TRANSPORT=http` | stdio |
+| `--host <addr>` | `REMINDERS_MCP_HOST` | `0.0.0.0` (all interfaces) |
+| `--port <n>` | `REMINDERS_MCP_PORT` | `3847` |
+| — | `REMINDERS_MCP_TOKEN` or `REMINDERS_MCP_TOKEN_FILE` | required |
+
+The token is only read from the environment or a file so it doesn't appear in `ps` output. It must be at least 32 characters. Pass `--host 127.0.0.1` to restrict the server to the local machine.
+
+Grant Reminders permission on the Mac first (step 2 of Quick Start). If a remote client calls `request_access` instead, the macOS prompt appears on the Mac, not on the client.
+
+### Connect a client
+
+Every request must carry the token as `Authorization: Bearer <token>`.
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport http apple-reminders http://my-mac.local:3847/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+**Claude Desktop** (via [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), since its config file only launches local commands):
+
+```json
+{
+  "mcpServers": {
+    "apple-reminders": {
+      "command": "npx",
+      "args": [
+        "mcp-remote", "http://my-mac.local:3847/mcp",
+        "--allow-http",
+        "--header", "Authorization:${AUTH_HEADER}"
+      ],
+      "env": { "AUTH_HEADER": "Bearer <token>" }
+    }
+  }
+}
+```
+
+### Security
+
+- **Bearer token.** Every request must carry the token. It is compared in constant time.
+- **Lockout.** An IP that sends 10 bad tokens within 15 minutes gets `429` responses until the window passes.
+- **Request limits.** Only `POST /mcp` is served. Bodies over 1 MB are rejected.
+- **Audit log.** Every tool call is logged to stderr with the caller's IP, along with rejected auth attempts.
+- **No TLS.** Traffic, including the token, is plain HTTP. That's fine on a trusted home or office LAN, but anyone who can sniff the network can read it. Don't expose the port to the internet; if you need access from outside your LAN, put it behind a VPN such as Tailscale or a TLS-terminating reverse proxy.
+- **Full access.** Anyone holding the token can read, create, and delete your reminders. Rotate it with `reminders-mcp rotate-token`, or by generating a new one and restarting the server.
 
 ## Available Tools (12 Total)
 
@@ -166,7 +265,7 @@ Restart Claude Desktop or Cursor to load the MCP server.
 
 ```
 AI Assistant (Claude/Cursor)
-    ↓ MCP Protocol (stdio)
+    ↓ MCP Protocol (stdio, or Streamable HTTP with --http)
 TypeScript MCP Server (Node.js)
     ↓ open -W -n -a RemindersCLI.app  (LaunchServices, for TCC attribution)
 RemindersCLI.app → Swift CLI Binary (EventKit)
@@ -249,7 +348,10 @@ apple-reminders-mcp-server/
 │   │                       # used as the TCC subject for Reminders access
 │   └── Package.swift
 ├── src/                    # TypeScript MCP Server
-│   ├── index.ts           # MCP server entry
+│   ├── index.ts           # Entry point: picks stdio or HTTP transport
+│   ├── server.ts          # MCP server and tool routing
+│   ├── config.ts          # CLI flags / env parsing
+│   ├── http-server.ts     # Token-protected Streamable HTTP transport
 │   ├── executor/          # Swift CLI executor (launches via `open` when
 │   │                      #   RemindersCLI.app is present)
 │   ├── tools/             # 12 MCP tool handlers
