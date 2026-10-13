@@ -1,6 +1,7 @@
 import { SwiftExecutor } from '../../executor/swift-executor.js';
-import { createReminderSchema, validateInput } from '../../validation/reminder-schemas.js';
+import { createReminderSchema, validateInput, WEEKDAYS } from '../../validation/reminder-schemas.js';
 import type { Reminder, CreateReminderInput } from '../../types/reminder.js';
+import { recurrenceSummaryLine } from '../recurrence-summary.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 /**
@@ -26,7 +27,8 @@ export const createReminderTool: Tool = {
       },
       dueDate: {
         type: 'string',
-        description: 'Due date in ISO 8601 format (e.g., "2024-12-31T14:00:00Z")',
+        description:
+          'Due date in ISO 8601 format (e.g., "2024-12-31T14:00:00Z"). Required when recurrence is set: it is the first occurrence.',
       },
       priority: {
         type: 'number',
@@ -47,6 +49,33 @@ export const createReminderTool: Tool = {
         type: 'string',
         description: 'URL to associate with the reminder',
       },
+      recurrence: {
+        type: 'object',
+        description:
+          'Make this a recurring reminder. Requires dueDate, which is the first occurrence. Completing an occurrence moves the reminder to its next one.',
+        properties: {
+          frequency: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'monthly', 'yearly'],
+            description: 'How often the reminder repeats',
+          },
+          interval: {
+            type: 'integer',
+            minimum: 1,
+            description:
+              'Repeat every N days/weeks/months/years (default 1; 2 with weekly means every other week)',
+          },
+          daysOfWeek: {
+            type: 'array',
+            items: { type: 'string', enum: [...WEEKDAYS] },
+            minItems: 1,
+            description:
+              'Weekly only: full lowercase weekday names to repeat on (e.g. ["monday", "wednesday"]). Omit to repeat on the weekday of dueDate.',
+          },
+        },
+        required: ['frequency'],
+        additionalProperties: false,
+      },
     },
     required: ['title'],
   },
@@ -66,12 +95,13 @@ export async function createReminderHandler(
   const reminder = await executor.execute<Reminder>('create-reminder', validatedArgs);
 
   // Format response for MCP
+  const recurrenceLine = recurrenceSummaryLine(reminder);
   const responseText = `✅ Created reminder: "${reminder.title}"
 
 ID: ${reminder.id}
 List: ${reminder.listName}
 ${reminder.dueDate ? `Due: ${new Date(reminder.dueDate).toLocaleString()}` : 'No due date'}
-${reminder.priority > 0 ? `Priority: ${formatPriority(reminder.priority)}` : ''}
+${recurrenceLine ? `${recurrenceLine}\n` : ''}${reminder.priority > 0 ? `Priority: ${formatPriority(reminder.priority)}` : ''}
 ${reminder.notes ? `\nNotes:\n${reminder.notes}` : ''}`;
 
   return {
@@ -87,7 +117,7 @@ ${reminder.notes ? `\nNotes:\n${reminder.notes}` : ''}`;
 /**
  * Format priority number to human-readable string
  */
-function formatPriority(priority: number): string {
+export function formatPriority(priority: number): string {
   if (priority === 0) return 'None';
   if (priority === 1) return 'High (Urgent !!!)';
   if (priority >= 2 && priority <= 4) return 'High';

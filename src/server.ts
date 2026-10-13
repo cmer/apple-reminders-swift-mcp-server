@@ -9,6 +9,7 @@ import { MCPError, MCPErrorCode } from './types/error.js';
 // Tool imports
 import { createReminderTool, createReminderHandler } from './tools/reminders/create-reminder.js';
 import { updateReminderTool, updateReminderHandler } from './tools/reminders/update-reminder.js';
+import { getReminderTool, getReminderHandler } from './tools/reminders/get-reminder.js';
 import { deleteReminderTool, deleteReminderHandler } from './tools/reminders/delete-reminder.js';
 import {
   completeReminderTool,
@@ -60,6 +61,7 @@ export function createServer(swiftExecutor: SwiftExecutor): Server {
       deleteReminderTool,
       completeReminderTool,
       uncompleteReminderTool,
+      getReminderTool,
       getRemindersListTool,
       
       // Lists
@@ -99,6 +101,9 @@ export function createServer(swiftExecutor: SwiftExecutor): Server {
 
         case 'uncomplete_reminder':
           return await uncompleteReminderHandler(args, swiftExecutor);
+
+        case 'get_reminder':
+          return await getReminderHandler(args, swiftExecutor);
 
         case 'get_reminders':
           return await getRemindersListHandler(args, swiftExecutor);

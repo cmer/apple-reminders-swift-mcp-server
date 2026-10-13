@@ -25,6 +25,8 @@ function reminder(overrides: Partial<Reminder>): Reminder {
     flagged: false,
     hasAlarms: false,
     hasRecurrenceRules: false,
+    recurrence: null,
+    dueDateHasTime: true,
     ...overrides,
   };
 }

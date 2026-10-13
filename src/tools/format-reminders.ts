@@ -1,4 +1,5 @@
 import type { Reminder } from '../types/reminder.js';
+import { recurrenceSummaryLine } from './recurrence-summary.js';
 
 /**
  * Returns extra lines to show under a reminder (without indentation), or none.
@@ -9,7 +10,12 @@ export type ReminderLineProducer = (reminder: Reminder) => string[];
  * Extension point: every list tool shows these lines under each reminder's first
  * line, before its own detail lines.
  */
-const extraLineProducers: ReminderLineProducer[] = [];
+const extraLineProducers: ReminderLineProducer[] = [
+  (reminder) => {
+    const line = recurrenceSummaryLine(reminder);
+    return line ? [line] : [];
+  },
+];
 
 export interface ReminderListFormat {
   /** Tool-specific first line, without the "N. " prefix */

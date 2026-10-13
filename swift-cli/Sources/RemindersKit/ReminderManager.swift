@@ -15,6 +15,12 @@ public class ReminderManager {
     /// - Parameter input: The reminder creation input
     /// - Returns: The created reminder
     public func createReminder(input: CreateReminderInput) throws -> Reminder {
+        // Validate before any EventKit call: bad rule values raise ObjC exceptions that crash the CLI
+        let ekRecurrenceRule = try input.recurrence.map { rule -> EKRecurrenceRule in
+            try rule.validate(dueDate: input.dueDate)
+            return try rule.toEKRecurrenceRule()
+        }
+        
         // Create EKReminder instance
         let ekReminder = EKReminder(eventStore: eventStore)
         
@@ -53,8 +59,9 @@ public class ReminderManager {
         }
         
         // Set recurrence rule
-        if let recurrence = input.recurrence {
-            ekReminder.addRecurrenceRule(recurrence.toEKRecurrenceRule())
+        // (replace, never append: a second rule shows in Reminders.app as a blank "Custom")
+        if let ekRecurrenceRule = ekRecurrenceRule {
+            ekReminder.recurrenceRules = [ekRecurrenceRule]
         }
         
         // Add alarms

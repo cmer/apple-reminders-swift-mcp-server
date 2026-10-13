@@ -1,22 +1,60 @@
 import { z } from 'zod';
 
+/** Same text as the Swift CLI's error, so agents see one message whichever side rejects. */
+export const RECURRENCE_NEEDS_DUE_DATE =
+  'A recurring reminder needs a due date: pass dueDate as the first occurrence.';
+
 /**
  * Recurrence frequency enum
  */
 export const recurrenceFrequencySchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
 /**
- * Recurrence rule schema
+ * Full lowercase English weekday names, Sunday first
  */
-export const recurrenceRuleSchema = z.object({
-  frequency: recurrenceFrequencySchema,
-  interval: z.number().int().positive().default(1),
-  endDate: z.string().optional(),
-  occurrenceCount: z.number().int().positive().optional(),
-  daysOfWeek: z.array(z.number().int().min(1).max(7)).optional(),
-  daysOfMonth: z.array(z.number().int().min(1).max(31)).optional(),
-  monthsOfYear: z.array(z.number().int().min(1).max(12)).optional(),
+export const WEEKDAYS = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+] as const;
+
+export const weekdaySchema = z.enum(WEEKDAYS, {
+  errorMap: () => ({
+    message: `daysOfWeek must use full lowercase weekday names: ${WEEKDAYS.join(', ')}`,
+  }),
 });
+
+/**
+ * Recurrence rule schema. The same checks run again in Swift before any EventKit call
+ * (RecurrenceRule.validate), so keep the messages in step.
+ */
+export const recurrenceRuleSchema = z
+  .object({
+    frequency: recurrenceFrequencySchema,
+    interval: z
+      .number({ invalid_type_error: 'interval must be a whole number, 1 or greater' })
+      .int('interval must be a whole number, 1 or greater')
+      .min(1, 'interval must be a whole number, 1 or greater')
+      .default(1),
+    daysOfWeek: z
+      .array(weekdaySchema)
+      .min(1, "daysOfWeek can't be empty: omit it to repeat on the due date's weekday")
+      .optional(),
+  })
+  .strict()
+  .superRefine((rule, ctx) => {
+    if (rule.daysOfWeek !== undefined && rule.frequency !== 'weekly') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['daysOfWeek'],
+        message: 'daysOfWeek only applies to weekly rules',
+      });
+    }
+  });
 
 /**
  * Location proximity enum
@@ -51,30 +89,40 @@ export const alarmSchema = z.object({
 /**
  * Schema for creating a reminder
  */
-export const createReminderSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  notes: z.string().optional(),
-  listName: z.string().optional(),
-  dueDate: z
-    .string()
-    .refine((val) => !val || !isNaN(Date.parse(val)), {
-      message: 'dueDate must be a valid ISO 8601 date string',
-    })
-    .optional(),
-  priority: z
-    .number()
-    .int()
-    .min(0, 'Priority must be between 0 and 9')
-    .max(9, 'Priority must be between 0 and 9')
-    .optional()
-    .describe('Priority: 0=none, 1=high/urgent (!!!), 5=medium, 9=low'),
-  flagged: z.boolean().optional(),
-  url: z.string().url('URL must be a valid URL').optional(),
-  tags: z.array(z.string()).optional(),
-  recurrence: recurrenceRuleSchema.optional(),
-  location: locationSchema.optional(),
-  alarms: z.array(alarmSchema).optional(),
-});
+export const createReminderSchema = z
+  .object({
+    title: z.string().min(1, 'Title is required'),
+    notes: z.string().optional(),
+    listName: z.string().optional(),
+    dueDate: z
+      .string()
+      .refine((val) => !val || !isNaN(Date.parse(val)), {
+        message: 'dueDate must be a valid ISO 8601 date string',
+      })
+      .optional(),
+    priority: z
+      .number()
+      .int()
+      .min(0, 'Priority must be between 0 and 9')
+      .max(9, 'Priority must be between 0 and 9')
+      .optional()
+      .describe('Priority: 0=none, 1=high/urgent (!!!), 5=medium, 9=low'),
+    flagged: z.boolean().optional(),
+    url: z.string().url('URL must be a valid URL').optional(),
+    tags: z.array(z.string()).optional(),
+    recurrence: recurrenceRuleSchema.optional(),
+    location: locationSchema.optional(),
+    alarms: z.array(alarmSchema).optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (input.recurrence && !input.dueDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dueDate'],
+        message: RECURRENCE_NEEDS_DUE_DATE,
+      });
+    }
+  });
 
 /**
  * Schema for updating a reminder

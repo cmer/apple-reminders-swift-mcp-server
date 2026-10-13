@@ -1,3 +1,23 @@
+export type Weekday =
+  | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday';
+
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/**
+ * Recurrence rule, used for input (create) and output (get_reminder, list tools)
+ */
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval: number; // integer >= 1
+  daysOfWeek?: Weekday[]; // weekly only
+}
+
 /**
  * Reminder data model
  */
@@ -17,6 +37,8 @@ export interface Reminder {
   url?: string;
   hasAlarms: boolean;
   hasRecurrenceRules: boolean;
+  recurrence: RecurrenceRule | null; // null for a reminder that doesn't repeat
+  dueDateHasTime: boolean; // false for a date-only due date
 }
 
 /**
@@ -31,6 +53,7 @@ export interface CreateReminderInput {
   flagged?: boolean;
   url?: string;
   tags?: string[];
+  recurrence?: RecurrenceRule;
 }
 
 /**
