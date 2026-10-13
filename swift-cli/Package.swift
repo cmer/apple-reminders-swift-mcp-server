@@ -34,8 +34,13 @@ let package = Package(
             name: "reminders-cli",
             dependencies: ["RemindersKit"]
         ),
-        // Test target removed — declared but no Tests/ directory exists,
-        // which causes SPM to overlap sources with the main targets.
+        // Test target - Swift Testing, in-memory only (no Reminders access needed).
+        // Tests/RemindersKitTests must exist: a test target with no directory makes
+        // SPM fall back to Sources/ and overlap the main targets.
+        .testTarget(
+            name: "RemindersKitTests",
+            dependencies: ["RemindersKit"]
+        ),
     ]
 )
 
