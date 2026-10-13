@@ -19,8 +19,9 @@ public struct Reminder: Codable {
     public let url: String?
     public let hasAlarms: Bool
     public let hasRecurrenceRules: Bool
-    /// The reminder's recurrence rule; nil when it doesn't repeat or the rule can't be mapped yet
-    public let recurrence: RecurrenceRule?
+    /// The reminder's recurrence: its rule, the unsupported marker for a rule this server can't
+    /// express exactly, or nil when it doesn't repeat
+    public let recurrence: ReminderRecurrence?
     /// False for a date-only due date
     public let dueDateHasTime: Bool
     
@@ -47,11 +48,7 @@ public struct Reminder: Codable {
         self.url = ekReminder.url?.absoluteString
         self.hasAlarms = ekReminder.hasAlarms
         self.hasRecurrenceRules = ekReminder.hasRecurrenceRules
-        if let rules = ekReminder.recurrenceRules, rules.count == 1 {
-            self.recurrence = RecurrenceRule.from(rules[0])
-        } else {
-            self.recurrence = nil
-        }
+        self.recurrence = ReminderRecurrence.from(rules: ekReminder.recurrenceRules)
         self.dueDateHasTime = ekReminder.dueDateComponents?.hour != nil
     }
     
@@ -72,7 +69,7 @@ public struct Reminder: Codable {
         url: String? = nil,
         hasAlarms: Bool = false,
         hasRecurrenceRules: Bool = false,
-        recurrence: RecurrenceRule? = nil,
+        recurrence: ReminderRecurrence? = nil,
         dueDateHasTime: Bool = false
     ) {
         self.id = id
@@ -95,7 +92,7 @@ public struct Reminder: Codable {
     }
     
     /// Same as the synthesized encoding, except `recurrence` is written as null (not left out)
-    /// when the reminder has no mappable rule.
+    /// when the reminder doesn't repeat.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatRecurrenceSummary } from '../../src/tools/recurrence-summary.js';
+import { formatRecurrenceSummary, recurrenceSummaryLine } from '../../src/tools/recurrence-summary.js';
+import { isUnsupportedRecurrence } from '../../src/types/reminder.js';
+import type { Reminder, UnsupportedRecurrence } from '../../src/types/reminder.js';
 
 describe('formatRecurrenceSummary', () => {
   it.each([
@@ -93,5 +95,51 @@ describe('formatRecurrenceSummary', () => {
 
   it('treats a missing interval as 1', () => {
     expect(formatRecurrenceSummary({ frequency: 'daily' } as never)).toBe('Every day');
+  });
+});
+
+describe('unsupported recurrence', () => {
+  const marker: UnsupportedRecurrence = { supported: false, rrule: 'FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU;BYSETPOS=-1' };
+  const reminder = (recurrence: Reminder['recurrence']): Reminder => ({
+    id: 'ID-1',
+    title: 'Gym',
+    isCompleted: false,
+    priority: 0,
+    listId: 'list-1',
+    listName: 'Personal',
+    flagged: false,
+    hasAlarms: false,
+    hasRecurrenceRules: recurrence !== null,
+    recurrence,
+    dueDateHasTime: false,
+  });
+
+  it('summarises the marker as a custom schedule', () => {
+    expect(formatRecurrenceSummary(marker)).toBe("Repeats on a custom schedule this server can't edit");
+  });
+
+  it('never puts the RRULE in the summary', () => {
+    expect(formatRecurrenceSummary(marker)).not.toContain('FREQ');
+    expect(recurrenceSummaryLine(reminder(marker))).toBe(
+      "🔁 Repeats on a custom schedule this server can't edit"
+    );
+  });
+
+  it('still gives supported rules and one-off reminders their usual lines', () => {
+    expect(recurrenceSummaryLine(reminder({ frequency: 'daily', interval: 1 }))).toBe('🔁 Every day');
+    expect(recurrenceSummaryLine(reminder(null))).toBeUndefined();
+  });
+
+  describe('isUnsupportedRecurrence', () => {
+    it('is true only for the marker', () => {
+      expect(isUnsupportedRecurrence(marker)).toBe(true);
+      expect(isUnsupportedRecurrence({ frequency: 'weekly', interval: 1 })).toBe(false);
+      expect(isUnsupportedRecurrence(null)).toBe(false);
+      expect(isUnsupportedRecurrence(undefined)).toBe(false);
+    });
+
+    it('treats supported: true as a supported rule, not the marker', () => {
+      expect(isUnsupportedRecurrence({ supported: true, frequency: 'daily', interval: 1 } as never)).toBe(false);
+    });
   });
 });

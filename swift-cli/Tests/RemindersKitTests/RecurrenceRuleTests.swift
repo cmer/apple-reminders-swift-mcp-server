@@ -272,7 +272,7 @@ struct ReminderRecurrenceTests {
         let reminder = EKReminder(eventStore: EKEventStore())
         reminder.title = "Gym"
         reminder.dueDateComponents = due
-        for rule in rules { reminder.addRecurrenceRule(rule) }
+        if !rules.isEmpty { reminder.recurrenceRules = rules }
         return reminder
     }
 
@@ -288,7 +288,7 @@ struct ReminderRecurrenceTests {
 
         let reminder = Reminder(from: ekReminder(rules: [rule], due: due))
 
-        #expect(reminder.recurrence == RecurrenceRule(frequency: .daily, interval: 2))
+        #expect(reminder.recurrence == .supported(RecurrenceRule(frequency: .daily, interval: 2)))
         #expect(reminder.hasRecurrenceRules)
         #expect(reminder.dueDateHasTime)
     }
@@ -308,7 +308,7 @@ struct ReminderRecurrenceTests {
         #expect(!Reminder(from: ekReminder(rules: [], due: nil)).dueDateHasTime)
     }
 
-    @Test("a rule that can't be mapped reads as nil but still counts as having rules")
+    @Test("a rule that can't be mapped reads as the unsupported marker and counts as having rules")
     func unmappedRule() {
         let rule = EKRecurrenceRule(
             recurrenceWith: .yearly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil,
@@ -316,11 +316,11 @@ struct ReminderRecurrenceTests {
 
         let reminder = Reminder(from: ekReminder(rules: [rule], due: DateComponents(calendar: .current, year: 2026, month: 10, day: 19)))
 
-        #expect(reminder.recurrence == nil)
+        #expect(reminder.recurrence == .unsupported(rrule: "FREQ=YEARLY;INTERVAL=1;BYWEEKNO=20"))
         #expect(reminder.hasRecurrenceRules)
     }
 
-    @Test("more than one rule reads as nil")
+    @Test("more than one rule reads as the unsupported marker with both RRULEs")
     func severalRules() {
         let rules = [
             EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil),
@@ -329,7 +329,13 @@ struct ReminderRecurrenceTests {
 
         let reminder = Reminder(from: ekReminder(rules: rules, due: DateComponents(calendar: .current, year: 2026, month: 10, day: 19)))
 
-        #expect(reminder.recurrence == nil)
+        // An EKReminder doesn't promise to keep the order rules were set in, so compare as a set.
+        guard case .unsupported(let rrule)? = reminder.recurrence else {
+            Issue.record("expected the unsupported marker, got \(String(describing: reminder.recurrence))")
+            return
+        }
+        #expect(Set(rrule.split(separator: "\n").map(String.init)) == ["FREQ=DAILY;INTERVAL=1", "FREQ=WEEKLY;INTERVAL=1"])
+        #expect(reminder.hasRecurrenceRules)
     }
 
     @Test("JSON has recurrence as the rule object or null, plus dueDateHasTime")
@@ -344,6 +350,16 @@ struct ReminderRecurrenceTests {
         let object = try #require(recurring["recurrence"] as? [String: Any])
         #expect(object["frequency"] as? String == "daily")
         #expect(object["interval"] as? Int == 1)
+        #expect(object["supported"] == nil)
+
+        let weekNumbers = EKRecurrenceRule(
+            recurrenceWith: .yearly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil,
+            monthsOfTheYear: nil, weeksOfTheYear: [20], daysOfTheYear: nil, setPositions: nil, end: nil)
+        let custom = try encode(Reminder(from: ekReminder(rules: [weekNumbers], due: nil)))
+        let marker = try #require(custom["recurrence"] as? [String: Any])
+        #expect(marker["supported"] as? Bool == false)
+        #expect(marker["rrule"] as? String == "FREQ=YEARLY;INTERVAL=1;BYWEEKNO=20")
+        #expect(Set(marker.keys) == ["supported", "rrule"])
     }
 }
 
@@ -797,5 +813,161 @@ struct FullVocabularyJSONTests {
         #expect(
             String(decoding: json, as: UTF8.self)
                 == #"{"frequency":"yearly","interval":1,"monthsOfYear":[11],"nthWeekday":{"ordinal":4,"weekday":"thursday"}}"#)
+    }
+}
+
+// MARK: - Unsupported recurrence rules
+
+private func yearlyRule(weeks: [Int]? = nil, daysOfYear: [Int]? = nil) -> EKRecurrenceRule {
+    EKRecurrenceRule(
+        recurrenceWith: .yearly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil,
+        monthsOfTheYear: nil, weeksOfTheYear: weeks?.map { NSNumber(value: $0) },
+        daysOfTheYear: daysOfYear?.map { NSNumber(value: $0) }, setPositions: nil, end: nil)
+}
+
+@Suite("RRULE extraction")
+struct RRuleExtractionTests {
+    @Test("takes the part after RRULE from EventKit's description")
+    func extracts() {
+        let description = "EKRecurrenceRule <0x600000c1c2a0> RRULE FREQ=MONTHLY;INTERVAL=1;BYDAY=MO"
+
+        #expect(ReminderRecurrence.rrule(fromDescription: description) == "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO")
+    }
+
+    @Test("works on a real rule's description")
+    func realDescription() {
+        let rule = ekRule(.weekly, interval: 2, end: EKRecurrenceEnd(occurrenceCount: 3))
+
+        #expect(ReminderRecurrence.rrule(of: rule) == "FREQ=WEEKLY;INTERVAL=2;COUNT=3")
+    }
+
+    @Test("falls back to the whole description when there is no RRULE marker")
+    func fallsBack() {
+        #expect(ReminderRecurrence.rrule(fromDescription: "something else entirely") == "something else entirely")
+        #expect(ReminderRecurrence.rrule(fromDescription: "") == "")
+        #expect(ReminderRecurrence.rrule(fromDescription: "EKRecurrenceRule <0x1> RRULE ") == "EKRecurrenceRule <0x1> RRULE ")
+    }
+}
+
+@Suite("Unsupported recurrence rules")
+struct UnsupportedRecurrenceTests {
+    private let monday = EKRecurrenceDayOfWeek(.monday)
+    private let tuesday = EKRecurrenceDayOfWeek(.tuesday)
+
+    private func unsupported(_ rule: EKRecurrenceRule) -> String? {
+        if case .unsupported(let rrule)? = ReminderRecurrence.from(rules: [rule]) { return rrule }
+        return nil
+    }
+
+    @Test("weeks of the year")
+    func weeksOfTheYear() {
+        #expect(unsupported(yearlyRule(weeks: [20])) == "FREQ=YEARLY;INTERVAL=1;BYWEEKNO=20")
+    }
+
+    @Test("days of the year")
+    func daysOfTheYear() {
+        #expect(unsupported(yearlyRule(daysOfYear: [100])) == "FREQ=YEARLY;INTERVAL=1;BYYEARDAY=100")
+    }
+
+    @Test("a weekday set with a position, like the last weekday")
+    func weekdaySetWithPosition() {
+        let rule = ekRule(.monthly, days: [monday, tuesday], positions: [-1])
+
+        #expect(unsupported(rule) == "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU;BYSETPOS=-1")
+    }
+
+    @Test("a daily rule with weekdays")
+    func dailyWithWeekdays() {
+        #expect(unsupported(ekRule(.daily, days: [monday])) == "FREQ=DAILY;INTERVAL=1;BYDAY=MO")
+    }
+
+    @Test("multiple ordinals")
+    func multipleOrdinals() {
+        let rule = ekRule(
+            .monthly,
+            days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 1), EKRecurrenceDayOfWeek(.monday, weekNumber: 3)])
+
+        #expect(unsupported(rule) == "FREQ=MONTHLY;INTERVAL=1;BYDAY=1MO,3MO")
+    }
+
+    @Test("negative days of the month")
+    func negativeDaysOfMonth() {
+        #expect(unsupported(ekRule(.monthly, daysOfMonth: [-1])) == "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=-1")
+    }
+
+    @Test("the end condition stays in the RRULE")
+    func keepsEnd() {
+        let rule = ekRule(.daily, days: [monday], end: EKRecurrenceEnd(occurrenceCount: 3))
+
+        #expect(unsupported(rule) == "FREQ=DAILY;INTERVAL=1;COUNT=3;BYDAY=MO")
+    }
+
+    @Test("several rules are joined with a newline, in order")
+    func severalRules() {
+        let rules = [
+            ekRule(.daily),
+            ekRule(.weekly, days: [monday]),
+            ekRule(.monthly, daysOfMonth: [1]),
+        ]
+
+        #expect(
+            ReminderRecurrence.from(rules: rules)
+                == .unsupported(
+                    rrule: "FREQ=DAILY;INTERVAL=1\nFREQ=WEEKLY;INTERVAL=1;BYDAY=MO\nFREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=1"))
+    }
+
+    @Test("two rules are unsupported even when each alone would be supported")
+    func twoSupportedRules() {
+        let rules = [ekRule(.daily), ekRule(.daily)]
+
+        #expect(ReminderRecurrence.from(rules: rules) == .unsupported(rrule: "FREQ=DAILY;INTERVAL=1\nFREQ=DAILY;INTERVAL=1"))
+    }
+
+    @Test("one supported rule maps to the supported case")
+    func supportedRule() {
+        #expect(
+            ReminderRecurrence.from(rules: [ekRule(.weekly, interval: 2, days: [monday])])
+                == .supported(RecurrenceRule(frequency: .weekly, interval: 2, daysOfWeek: ["monday"])))
+    }
+
+    @Test("no rules map to nil")
+    func noRules() {
+        #expect(ReminderRecurrence.from(rules: []) == nil)
+        #expect(ReminderRecurrence.from(rules: nil) == nil)
+    }
+}
+
+@Suite("ReminderRecurrence coding")
+struct ReminderRecurrenceCodingTests {
+    private func json(_ value: ReminderRecurrence) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    @Test("a supported rule encodes as the plain rule object, without a supported key")
+    func encodesSupported() throws {
+        let value = ReminderRecurrence.supported(RecurrenceRule(frequency: .weekly, interval: 2, daysOfWeek: ["monday"]))
+
+        #expect(try json(value) == #"{"daysOfWeek":["monday"],"frequency":"weekly","interval":2}"#)
+    }
+
+    @Test("the marker encodes as supported:false plus the RRULE")
+    func encodesMarker() throws {
+        let value = ReminderRecurrence.unsupported(rrule: "FREQ=MONTHLY;INTERVAL=1;BYDAY=MO")
+
+        #expect(try json(value) == #"{"rrule":"FREQ=MONTHLY;INTERVAL=1;BYDAY=MO","supported":false}"#)
+    }
+
+    @Test("both shapes decode back")
+    func roundTrips() throws {
+        let values: [ReminderRecurrence] = [
+            .supported(RecurrenceRule(frequency: .daily, occurrenceCount: 3)),
+            .unsupported(rrule: "FREQ=YEARLY;INTERVAL=1;BYWEEKNO=20"),
+        ]
+        for value in values {
+            let decoded = try JSONDecoder().decode(ReminderRecurrence.self, from: Data(try json(value).utf8))
+            #expect(decoded == value)
+        }
     }
 }

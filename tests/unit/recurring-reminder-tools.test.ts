@@ -10,7 +10,7 @@ import {
 import { searchRemindersHandler } from '../../src/tools/search/search-reminders.js';
 import { createServer } from '../../src/server.js';
 import type { SwiftExecutor } from '../../src/executor/swift-executor.js';
-import type { RecurrenceRule, Reminder } from '../../src/types/reminder.js';
+import type { RecurrenceRule, Reminder, UnsupportedRecurrence } from '../../src/types/reminder.js';
 
 const DUE = '2026-10-19T14:30:00.000Z';
 const RULE: RecurrenceRule = {
@@ -19,6 +19,11 @@ const RULE: RecurrenceRule = {
   daysOfWeek: ['monday', 'wednesday'],
 };
 const LINE = '🔁 Every 2 weeks on Mon, Wed';
+const UNSUPPORTED: UnsupportedRecurrence = {
+  supported: false,
+  rrule: 'FREQ=MONTHLY;INTERVAL=1;BYDAY=MO,TU;BYSETPOS=-1',
+};
+const UNSUPPORTED_LINE = "🔁 Repeats on a custom schedule this server can't edit";
 
 function reminder(overrides: Partial<Reminder>): Reminder {
   return {
@@ -209,22 +214,33 @@ describe('get_reminder', () => {
     expect(text).not.toContain('Recurrence rule');
   });
 
+  it('shows the unsupported marker with its RRULE, only here', async () => {
+    const { executor } = executorReturning(
+      reminder({ dueDate: DUE, hasRecurrenceRules: true, recurrence: UNSUPPORTED })
+    );
+    const text = textOf(await getReminderHandler({ id: 'ID-1' }, executor));
+    expect(text).toContain(UNSUPPORTED_LINE);
+    expect(text).toContain(`Recurrence rule:\n${JSON.stringify(UNSUPPORTED, null, 2)}`);
+    expect(text).toContain(UNSUPPORTED.rrule);
+    expect(text).toContain('"supported": false');
+  });
+
   it('rejects a missing id', async () => {
     const { executor } = executorReturning(reminder({}));
     await expect(getReminderHandler({}, executor)).rejects.toThrow();
   });
 });
 
+const cases: Array<[string, (e: SwiftExecutor) => Promise<{ content: Array<{ text: string }> }>]> = [
+  ['get_reminders', (e) => getRemindersListHandler({}, e)],
+  ['get_todays_reminders', (e) => getTodaysRemindersHandler({}, e)],
+  ['get_overdue_reminders', (e) => getOverdueRemindersHandler({}, e)],
+  ['get_completed_reminders', (e) => getCompletedRemindersHandler({}, e)],
+  ['search_reminders', (e) => searchRemindersHandler({ searchText: 'x' }, e)],
+];
+
 describe('list tools show the recurrence line', () => {
   const plain = reminder({ id: 'P', title: 'Milk' });
-  const cases: Array<[string, (e: SwiftExecutor) => Promise<{ content: Array<{ text: string }> }>]> = [
-    ['get_reminders', (e) => getRemindersListHandler({}, e)],
-    ['get_todays_reminders', (e) => getTodaysRemindersHandler({}, e)],
-    ['get_overdue_reminders', (e) => getOverdueRemindersHandler({}, e)],
-    ['get_completed_reminders', (e) => getCompletedRemindersHandler({}, e)],
-    ['search_reminders', (e) => searchRemindersHandler({ searchText: 'x' }, e)],
-  ];
-
   it.each(cases)('%s', async (_name, run) => {
     const { executor } = executorReturning([recurring, plain]);
     const text = textOf(await run(executor));
@@ -237,5 +253,30 @@ describe('list tools show the recurrence line', () => {
     const { executor } = executorReturning([recurring]);
     const text = textOf(await getRemindersListHandler({}, executor));
     expect(text).toContain(`\n   ${LINE}\n   List: Personal | ID: ID-1`);
+  });
+});
+
+describe('an unsupported recurrence rule', () => {
+  const unsupported = reminder({
+    id: 'U',
+    title: 'Pay rent',
+    dueDate: DUE,
+    hasRecurrenceRules: true,
+    recurrence: UNSUPPORTED,
+  });
+
+  it.each(cases)('%s shows the custom-schedule line and never the RRULE', async (_name, run) => {
+    const { executor } = executorReturning([unsupported]);
+    const text = textOf(await run(executor));
+    expect(text).toContain(`\n   ${UNSUPPORTED_LINE}`);
+    expect(text).not.toContain('FREQ');
+    expect(text).not.toContain('BYSETPOS');
+  });
+
+  it('create_reminder shows the custom-schedule line and never the RRULE', async () => {
+    const { executor } = executorReturning(unsupported);
+    const text = textOf(await createReminderHandler({ title: 'Pay rent' }, executor));
+    expect(text).toContain(UNSUPPORTED_LINE);
+    expect(text).not.toContain('FREQ');
   });
 });

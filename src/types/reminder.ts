@@ -30,6 +30,30 @@ export interface RecurrenceRule {
 }
 
 /**
+ * What a read reports for a rule this server can't express exactly (several rules, week-of-year
+ * rules, "last weekday" patterns, ...). Only this shape carries a `supported` key; supported
+ * rules omit it. `rrule` is EventKit's RRULE text, one rule per line when there are several.
+ */
+export interface UnsupportedRecurrence {
+  supported: false;
+  rrule: string;
+}
+
+/** A reminder's recurrence on read: a rule this server understands, or the unsupported marker. */
+export type ReminderRecurrence = RecurrenceRule | UnsupportedRecurrence;
+
+export function isUnsupportedRecurrence(
+  recurrence: ReminderRecurrence | null | undefined
+): recurrence is UnsupportedRecurrence {
+  return (
+    recurrence !== null &&
+    recurrence !== undefined &&
+    'supported' in recurrence &&
+    recurrence.supported === false
+  );
+}
+
+/**
  * Reminder data model
  */
 export interface Reminder {
@@ -48,7 +72,7 @@ export interface Reminder {
   url?: string;
   hasAlarms: boolean;
   hasRecurrenceRules: boolean;
-  recurrence: RecurrenceRule | null; // null for a reminder that doesn't repeat
+  recurrence: ReminderRecurrence | null; // null for a reminder that doesn't repeat
   dueDateHasTime: boolean; // false for a date-only due date
 }
 

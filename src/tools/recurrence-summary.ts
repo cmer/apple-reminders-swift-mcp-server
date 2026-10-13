@@ -1,4 +1,5 @@
-import type { RecurrenceRule, Reminder, Weekday } from '../types/reminder.js';
+import { isUnsupportedRecurrence } from '../types/reminder.js';
+import type { Reminder, ReminderRecurrence, Weekday } from '../types/reminder.js';
 
 /** Sunday first, the order Reminders.app lists weekdays in. */
 const WEEKDAYS: Array<{ name: Weekday; abbreviation: string }> = [
@@ -66,11 +67,16 @@ function formatEndDate(endDate: string): string {
   return `${month} ${Number(match[3])}, ${Number(match[1])}`;
 }
 
+/** Never includes the RRULE: only get_reminder shows that. */
+const UNSUPPORTED_SUMMARY = "Repeats on a custom schedule this server can't edit";
+
 /**
  * Describe a recurrence rule the way Reminders.app does, e.g. "Every 2 weeks on Mon, Wed".
  * Deterministic: no locale or clock involved.
  */
-export function formatRecurrenceSummary(rule: RecurrenceRule): string {
+export function formatRecurrenceSummary(rule: ReminderRecurrence): string {
+  if (isUnsupportedRecurrence(rule)) return UNSUPPORTED_SUMMARY;
+
   const unit = UNITS[rule.frequency];
   const interval = rule.interval ?? 1;
   let summary = interval === 1 ? `Every ${unit}` : `Every ${interval} ${unit}s`;
