@@ -189,9 +189,9 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 - **No TLS.** Traffic, including the token, is plain HTTP. That's fine on a trusted home or office LAN, but anyone who can sniff the network can read it. Don't expose the port to the internet; if you need access from outside your LAN, put it behind a VPN such as Tailscale or a TLS-terminating reverse proxy.
 - **Full access.** Anyone holding the token can read, create, and delete your reminders. Rotate it with `reminders-mcp rotate-token`, or by generating a new one and restarting the server.
 
-## Available Tools (15 Total)
+## Available Tools (16 Total)
 
-### Reminder Management (6 tools)
+### Reminder Management (7 tools)
 
 1. **`create_reminder`** - Create reminders with comprehensive attributes
    - Basic: title, notes, due date, priority, tags, URL
@@ -200,27 +200,28 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 3. **`delete_reminder`** - Permanently delete reminders
 4. **`complete_reminder`** - Mark reminder as complete
 5. **`uncomplete_reminder`** - Mark reminder as incomplete
-6. **`get_reminders`** - List all reminders (filter by completion)
+6. **`get_reminder`** - Get one reminder by ID with full detail, including its recurrence rule
+7. **`get_reminders`** - List all reminders (filter by completion)
 
 ### List Management (4 tools)
 
-7. **`get_all_lists`** - Get all reminder lists, with their account and ID
-8. **`create_list`** - Create a list, with optional hex color and account (defaults to the account of your default list, usually iCloud)
-9. **`update_list`** - Rename or recolor a list
-10. **`delete_list`** - Delete a list **and every reminder in it**
+8. **`get_all_lists`** - Get all reminder lists, with their account and ID
+9. **`create_list`** - Create a list, with optional hex color and account (defaults to the account of your default list, usually iCloud)
+10. **`update_list`** - Rename or recolor a list
+11. **`delete_list`** - Delete a list **and every reminder in it**
 
 `update_list` and `delete_list` take either an `id` or a `name`. If two lists share a name, the call fails and asks for the ID. Read-only lists (e.g. subscribed or shared lists you can't edit) can't be changed.
 
 ### Search & Query (4 tools)
 
-11. **`search_reminders`** - Search by text in title/notes
-12. **`get_todays_reminders`** - Get reminders due today
-13. **`get_overdue_reminders`** - Get past-due reminders
-14. **`get_completed_reminders`** - Get completed reminders (optional date range)
+12. **`search_reminders`** - Search by text in title/notes
+13. **`get_todays_reminders`** - Get reminders due today
+14. **`get_overdue_reminders`** - Get past-due reminders
+15. **`get_completed_reminders`** - Get completed reminders (optional date range)
 
 ### System (1 tool)
 
-15. **`request_access`** - Trigger the macOS Reminders permission prompt. Call once before other tools if access has not yet been granted.
+16. **`request_access`** - Trigger the macOS Reminders permission prompt. Call once before other tools if access has not yet been granted.
 
 ## Usage Examples
 
@@ -247,6 +248,7 @@ claude mcp add --transport http --scope user apple-reminders http://my-mac.local
 "Create a weekly reminder for team meeting every Monday at 10am"
 "Set up a daily reminder to take medication at 8am"
 "Create a monthly reminder on the 1st to pay rent"
+"Remind me on the first Monday of every month to review the budget"
 ```
 
 ### Location-Based Reminders
@@ -367,7 +369,7 @@ apple-reminders-mcp-server/
 │   ├── http-server.ts     # Token-protected Streamable HTTP transport
 │   ├── executor/          # Swift CLI executor (launches via `open` when
 │   │                      #   RemindersCLI.app is present)
-│   ├── tools/             # 15 MCP tool handlers
+│   ├── tools/             # 16 MCP tool handlers
 │   ├── validation/        # Zod schemas
 │   └── types/             # TypeScript types
 └── docs/                  # Documentation
@@ -387,6 +389,8 @@ npm run dev            # Watch mode for TypeScript
 npm test               # Run tests
 npm run lint           # Lint code
 npm run format         # Format code
+swift test             # Swift unit tests, run from swift-cli/ (no Reminders access needed)
+RUN_LIVE_REMINDERS=1 npm run test:live  # Opt-in live tests against real Reminders; creates and deletes its own throwaway list
 
 # Cleanup
 npm run clean          # Remove build artifacts
@@ -415,8 +419,8 @@ npm run build
 # Create recurring reminder
 ./swift-cli/.build/release/reminders-cli create-reminder '{
   "title":"Weekly Meeting",
-  "dueDate":"2026-01-13T10:00:00Z",
-  "recurrence":{"frequency":"weekly","interval":1}
+  "dueDate":"2026-01-12T10:00:00Z",
+  "recurrence":{"frequency":"weekly","daysOfWeek":["monday"]}
 }'
 
 # Search reminders
@@ -441,20 +445,58 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 ### Recurring Reminders
 
-Create reminders that repeat on a schedule:
+Create reminders that repeat on a schedule. A recurring reminder needs a `dueDate`, which is the first occurrence:
 
 ```typescript
 {
-  "title": "Weekly team sync",
-  "dueDate": "2026-01-13T10:00:00Z",
+  "title": "Team sync",
+  "dueDate": "2026-01-12T10:00:00Z",
   "recurrence": {
-    "frequency": "weekly",    // daily, weekly, monthly, yearly
-    "interval": 1,            // every N weeks
-    "daysOfWeek": [2],        // Monday (1=Sunday, 7=Saturday)
-    "endDate": "2026-12-31T00:00:00Z"  // optional
+    "frequency": "weekly",                        // daily, weekly, monthly, yearly
+    "interval": 1,                                // every N weeks
+    "daysOfWeek": ["monday", "wednesday"],        // full lowercase weekday names
+    "endDate": "2026-12-31"                       // calendar date, last day included
   }
 }
 ```
+
+Monthly on the first Monday, or yearly on Thanksgiving (the fourth Thursday of November):
+
+```typescript
+"recurrence": { "frequency": "monthly", "nthWeekday": { "ordinal": 1, "weekday": "monday" } }
+"recurrence": { "frequency": "yearly", "monthsOfYear": [11], "nthWeekday": { "ordinal": 4, "weekday": "thursday" } }
+```
+
+Fields:
+
+- `interval`: every N days, weeks, months or years (default 1)
+- `daysOfWeek` (weekly): e.g. `["monday", "friday"]`
+- `daysOfMonth` (monthly): days 1–31, e.g. `[1, 15]`
+- `nthWeekday` (monthly or yearly): `ordinal` 1–5, or -1 for the last one. A yearly rule also needs `monthsOfYear`.
+- `monthsOfYear` (yearly): months 1–12
+- `endDate` (`YYYY-MM-DD`) or `occurrenceCount`: stop after a date, or after N occurrences remaining, including the current one. Use one or the other, not both.
+
+A rule without a `dueDate` is rejected, and so is one that combines `daysOfMonth` with `nthWeekday`.
+
+#### Reading
+
+List tools show a `🔁` summary line under each recurring reminder (e.g. "🔁 Every 2 weeks on Mon, Wed"). `get_reminder` returns the full rule as JSON. A rule this server can't express, such as "last weekday" or a reminder with several rules, reads as `{"supported": false, "rrule": "..."}` and shows "Repeats on a custom schedule this server can't edit". Leave such a reminder alone by omitting `recurrence` on update.
+
+#### Updating
+
+In `update_reminder`, `recurrence` and `dueDate` work the same way: omitted = unchanged, `null` = clear, a value = replace. Clearing the due date of a recurring reminder is rejected unless you also pass `recurrence: null`. To change a rule, read it with `get_reminder` first and send the whole rule back, because it replaces the old one.
+
+`notes` and `url` are still replaced on every update, so omitting them clears them. This is a change for `dueDate`: omitting it used to clear the due date, and now leaves it as it is.
+
+#### Completing
+
+Completing a recurring reminder advances it to its next occurrence. It keeps its ID and stays open, and Reminders leaves a completed copy behind under a new ID. Completing the last occurrence completes the reminder for good.
+
+To stop a reminder repeating, call `update_reminder` with `recurrence: null`, then `complete_reminder`. `uncomplete_reminder` can't undo an advance.
+
+#### Known limitation: Hourly repeats
+
+Reminders.app "Hourly" repeats show through this server as "Every day", because EventKit reports them as daily. Renaming, editing other fields and completing them are safe. Setting `recurrence` on one replaces the hourly repeat.
 
 ### Location-Based Reminders
 

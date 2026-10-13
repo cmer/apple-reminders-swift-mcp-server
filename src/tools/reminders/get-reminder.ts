@@ -12,7 +12,7 @@ export const getReminderTool: Tool = {
   name: 'get_reminder',
   description:
     'Get one reminder by ID with full detail: title, list, notes, URL, priority, due date and, for a recurring reminder, its recurrence rule as JSON. ' +
-    'Note: Reminders.app "Hourly" repeats are reported by EventKit as daily, so they show as "Every day".',
+    'Note: Reminders.app "Hourly" repeats show up here as daily ("Every day") because EventKit reports them that way; renaming, editing other fields and completing them is safe; setting recurrence on one replaces the hourly repeat.',
   inputSchema: {
     type: 'object',
     properties: {

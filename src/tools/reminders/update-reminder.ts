@@ -12,7 +12,8 @@ export const updateReminderTool: Tool = {
     'To stop a reminder repeating, pass recurrence: null (the due date stays). ' +
     'To stop it repeating and finish it, pass recurrence: null, then call complete_reminder. ' +
     'To edit a recurrence rule, read it with get_reminder first and send the whole rule back, because it replaces the old one. ' +
-    'A recurring reminder always needs a due date: clearing dueDate on one is rejected unless you also pass recurrence: null.',
+    'A recurring reminder always needs a due date: clearing dueDate on one is rejected unless you also pass recurrence: null. ' +
+    'Note: Reminders.app "Hourly" repeats show up here as daily ("Every day") because EventKit reports them that way; renaming, editing other fields and completing them is safe; setting recurrence on one replaces the hourly repeat.',
   inputSchema: {
     type: 'object',
     properties: {
