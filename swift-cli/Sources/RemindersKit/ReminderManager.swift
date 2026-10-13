@@ -229,11 +229,39 @@ public class ReminderManager {
     }
     
     /// Update an existing reminder
+    ///
+    /// `dueDate` and `recurrence` are tri-state: omitted leaves them alone (an omitted
+    /// `recurrence` never touches `recurrenceRules`, so unsupported rules and Hourly repeats
+    /// survive), `null` clears them, a value sets them. The other fields keep the full-replace
+    /// behaviour.
     /// - Parameter input: The reminder update input
     /// - Returns: The updated reminder
-    public func updateReminder(id: String, input: CreateReminderInput) throws -> Reminder {
+    public func updateReminder(id: String, input: UpdateReminderInput) throws -> Reminder {
         guard let ekReminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
             throw ReminderError.reminderNotFound(id)
+        }
+        
+        // Check everything that can fail before changing anything. Bad rule values raise ObjC
+        // exceptions that crash the CLI, so the rule is validated before any EventKit call.
+        if case .set(let rule) = input.recurrence {
+            try rule.validate()
+        }
+        
+        if let message = UpdateDueDateRules.violation(
+            currentlyHasRules: ekReminder.hasRecurrenceRules,
+            currentlyHasDueDate: ekReminder.dueDateComponents != nil,
+            recurrence: input.recurrence,
+            dueDate: input.dueDate,
+            title: input.title
+        ) {
+            throw ReminderError.invalidInput(message)
+        }
+        
+        let newDueDate: Date?
+        if case .set(let dueDateString) = input.dueDate {
+            newDueDate = try parseDateString(dueDateString)
+        } else {
+            newDueDate = nil
         }
         
         // Update title
@@ -256,16 +284,10 @@ public class ReminderManager {
             ekReminder.priority = max(0, min(9, priority))
         }
         
-        // Update due date
-        if let dueDateString = input.dueDate {
-            let date = try parseDateString(dueDateString)
-            ekReminder.dueDateComponents = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: date
-            )
-        } else {
-            ekReminder.dueDateComponents = nil
-        }
+        // Update recurrence, then due date (the rule goes first so a rule and its due date can be
+        // cleared together)
+        try Self.applyRecurrence(input.recurrence, to: ekReminder)
+        Self.applyDueDate(input.dueDate, parsed: newDueDate, to: ekReminder)
         
         // Update URL
         if let urlString = input.url {
@@ -284,7 +306,18 @@ public class ReminderManager {
         }
         
         // Save the reminder
-        try eventStore.save(ekReminder, commit: true)
+        do {
+            try eventStore.save(ekReminder, commit: true)
+        } catch {
+            // Backstop for the due-date check above: EventKit's own "repeating reminder must
+            // have a due date" error gets the same agent-readable message
+            if let message = UpdateDueDateRules.message(
+                forSaveError: error, recurrence: input.recurrence, title: input.title)
+            {
+                throw ReminderError.invalidInput(message)
+            }
+            throw error
+        }
         
         return Reminder(from: ekReminder)
     }
@@ -319,6 +352,42 @@ public class ReminderManager {
         try eventStore.save(ekReminder, commit: true)
         
         return Reminder(from: ekReminder)
+    }
+    
+    // MARK: - Update helpers
+    
+    /// Apply the `recurrence` field of an update.
+    ///
+    /// Omitted leaves `recurrenceRules` alone (this is what keeps unsupported rules and Hourly
+    /// repeats intact), `null` removes the rules, an object replaces them with exactly one rule.
+    static func applyRecurrence(_ update: FieldUpdate<RecurrenceRule>, to ekReminder: EKReminder) throws {
+        switch update {
+        case .unchanged:
+            break
+        case .cleared:
+            ekReminder.recurrenceRules = nil
+        case .set(let rule):
+            try rule.validate()
+            // replace, never append: a second rule shows in Reminders.app as a blank "Custom"
+            ekReminder.recurrenceRules = [try rule.toEKRecurrenceRule()]
+        }
+    }
+    
+    /// Apply the `dueDate` field of an update. Omitted leaves the due date alone.
+    /// - Parameter parsed: The date parsed from a `.set` value
+    static func applyDueDate(_ update: FieldUpdate<String>, parsed: Date?, to ekReminder: EKReminder) {
+        switch update {
+        case .unchanged:
+            break
+        case .cleared:
+            ekReminder.dueDateComponents = nil
+        case .set:
+            guard let date = parsed else { return }
+            ekReminder.dueDateComponents = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: date
+            )
+        }
     }
     
     // MARK: - Private Helpers

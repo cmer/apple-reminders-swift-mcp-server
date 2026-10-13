@@ -83,36 +83,9 @@ class CommandRouter {
     }
     
     private func handleUpdateReminder(jsonInput: String) throws -> String {
-        struct UpdateReminderInput: Codable {
-            let id: String
-            let title: String
-            let notes: String?
-            let listName: String?
-            let dueDate: String?
-            let priority: Int?
-            let flagged: Bool?
-            let url: String?
-            let tags: [String]?
-            let recurrence: RecurrenceRule?
-            let location: ReminderLocation?
-            let alarms: [ReminderAlarm]?
-        }
-        
+        // Own type (not CreateReminderInput): dueDate and recurrence tell "absent" from "null"
         let input = try decodeInput(UpdateReminderInput.self, from: jsonInput)
-        let updateInput = CreateReminderInput(
-            title: input.title,
-            notes: input.notes,
-            listName: input.listName,
-            dueDate: input.dueDate,
-            priority: input.priority,
-            flagged: input.flagged,
-            url: input.url,
-            tags: input.tags,
-            recurrence: input.recurrence,
-            location: input.location,
-            alarms: input.alarms
-        )
-        let reminder = try reminderManager.updateReminder(id: input.id, input: updateInput)
+        let reminder = try reminderManager.updateReminder(id: input.id, input: input)
         let response = CLIResponse(success: true, data: reminder)
         return try encodeResponse(response)
     }

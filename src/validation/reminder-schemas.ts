@@ -215,24 +215,64 @@ export const createReminderSchema = z
   });
 
 /**
- * Schema for updating a reminder
+ * What an update says about the recurrence of a reminder: omitted = unchanged, null = remove the
+ * rule, an object = replace it. `get_reminder` shows an unsupported rule as
+ * `{ supported: false, rrule }`; that shape is read-only, so say so instead of listing the
+ * strict schema's unrelated complaints.
  */
-export const updateReminderSchema = z.object({
-  id: z.string().min(1, 'Reminder ID is required'),
-  title: z.string().min(1, 'Title is required'),
-  notes: z.string().optional(),
-  listName: z.string().optional(),
-  dueDate: z
-    .string()
-    .refine((val) => !val || !isNaN(Date.parse(val)), {
-      message: 'dueDate must be a valid ISO 8601 date string',
-    })
-    .optional(),
-  priority: z.number().int().min(0).max(9).optional(),
-  flagged: z.boolean().optional(),
-  url: z.string().url().optional(),
-  tags: z.array(z.string()).optional(),
-});
+const recurrenceUpdateSchema = z.preprocess((value, ctx) => {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'supported' in value &&
+    value.supported === false
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "recurrence can't be sent back in the { supported: false, rrule } form that get_reminder shows for a rule this server can't edit. Pass a new rule to replace it, or recurrence: null to remove it.",
+    });
+    return z.NEVER;
+  }
+  return value;
+}, recurrenceRuleSchema.nullable().optional());
+
+/**
+ * Schema for updating a reminder.
+ *
+ * `dueDate` and `recurrence` are tri-state: omitted = unchanged, null = cleared, value = set.
+ * `.nullable().optional()` keeps an explicit null in the parsed output, so it reaches the CLI.
+ */
+export const updateReminderSchema = z
+  .object({
+    id: z.string().min(1, 'Reminder ID is required'),
+    title: z.string().min(1, 'Title is required'),
+    notes: z.string().optional(),
+    listName: z.string().optional(),
+    dueDate: z
+      .string()
+      .refine((val) => !val || !isNaN(Date.parse(val)), {
+        message: 'dueDate must be a valid ISO 8601 date string',
+      })
+      .nullable()
+      .optional(),
+    priority: z.number().int().min(0).max(9).optional(),
+    flagged: z.boolean().optional(),
+    url: z.string().url().optional(),
+    tags: z.array(z.string()).optional(),
+    recurrence: recurrenceUpdateSchema,
+  })
+  .superRefine((input, ctx) => {
+    // Only the case the input alone decides. Whether an existing rule survives a cleared due
+    // date depends on the current reminder, so the CLI checks that.
+    if (input.recurrence && input.dueDate === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dueDate'],
+        message: RECURRENCE_NEEDS_DUE_DATE,
+      });
+    }
+  });
 
 /**
  * Schema for getting a reminder

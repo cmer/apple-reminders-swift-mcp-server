@@ -99,10 +99,11 @@ export interface UpdateReminderInput {
   title?: string;
   notes?: string;
   listName?: string;
-  dueDate?: string;
+  dueDate?: string | null; // omitted = unchanged, null = cleared
   priority?: number;
   flagged?: boolean;
   url?: string;
   tags?: string[];
+  recurrence?: RecurrenceRule | null; // omitted = unchanged, null = rule removed
 }
 
