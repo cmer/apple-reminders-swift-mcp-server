@@ -139,7 +139,7 @@ struct RecurrenceRuleFromEventKitTests {
         }
     }
 
-    @Test("rules this ticket can't express map to nil without crashing")
+    @Test("rules the model can't express map to nil without crashing")
     func unmappedRulesAreNil() {
         let monday = EKRecurrenceDayOfWeek(.monday)
         let firstMonday = EKRecurrenceDayOfWeek(.monday, weekNumber: 1)
@@ -156,12 +156,10 @@ struct RecurrenceRuleFromEventKitTests {
             EKRecurrenceRule(
                 recurrenceWith: .weekly, interval: 1, daysOfTheWeek: [monday], daysOfTheMonth: nil,
                 monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: [1], end: nil),
-            // monthly on days of the month
+            // monthly on a day counted from the end of the month
             EKRecurrenceRule(
-                recurrenceWith: .monthly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: [1, 15],
+                recurrenceWith: .monthly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: [-1],
                 monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: nil),
-            // weekly with an end
-            EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: EKRecurrenceEnd(occurrenceCount: 3)),
         ]
         for rule in rules {
             #expect(RecurrenceRule.from(rule) == nil)
@@ -312,7 +310,9 @@ struct ReminderRecurrenceTests {
 
     @Test("a rule that can't be mapped reads as nil but still counts as having rules")
     func unmappedRule() {
-        let rule = EKRecurrenceRule(recurrenceWith: .weekly, interval: 1, end: EKRecurrenceEnd(occurrenceCount: 3))
+        let rule = EKRecurrenceRule(
+            recurrenceWith: .yearly, interval: 1, daysOfTheWeek: nil, daysOfTheMonth: nil,
+            monthsOfTheYear: nil, weeksOfTheYear: [20], daysOfTheYear: nil, setPositions: nil, end: nil)
 
         let reminder = Reminder(from: ekReminder(rules: [rule], due: DateComponents(calendar: .current, year: 2026, month: 10, day: 19)))
 
@@ -344,5 +344,458 @@ struct ReminderRecurrenceTests {
         let object = try #require(recurring["recurrence"] as? [String: Any])
         #expect(object["frequency"] as? String == "daily")
         #expect(object["interval"] as? Int == 1)
+    }
+}
+
+// MARK: - Full rule vocabulary
+
+private func ekRule(
+    _ frequency: EKRecurrenceFrequency,
+    interval: Int = 1,
+    days: [EKRecurrenceDayOfWeek]? = nil,
+    daysOfMonth: [Int]? = nil,
+    months: [Int]? = nil,
+    positions: [Int]? = nil,
+    end: EKRecurrenceEnd? = nil
+) -> EKRecurrenceRule {
+    EKRecurrenceRule(
+        recurrenceWith: frequency, interval: interval, daysOfTheWeek: days,
+        daysOfTheMonth: daysOfMonth?.map { NSNumber(value: $0) },
+        monthsOfTheYear: months?.map { NSNumber(value: $0) },
+        weeksOfTheYear: nil, daysOfTheYear: nil,
+        setPositions: positions?.map { NSNumber(value: $0) }, end: end)
+}
+
+private let thanksgiving = RecurrenceRule(
+    frequency: .yearly, nthWeekday: NthWeekday(ordinal: 4, weekday: "thursday"), monthsOfYear: [11])
+
+@Suite("Full vocabulary to EventKit")
+struct FullVocabularyToEventKitTests {
+    @Test("monthly days of the month")
+    func daysOfMonth() throws {
+        let ek = try RecurrenceRule(frequency: .monthly, interval: 2, daysOfMonth: [1, 15]).toEKRecurrenceRule()
+
+        #expect(ek.frequency == .monthly)
+        #expect(ek.interval == 2)
+        #expect(ek.daysOfTheMonth?.map { $0.intValue } == [1, 15])
+        #expect(ek.daysOfTheWeek == nil)
+        #expect(ek.monthsOfTheYear == nil)
+        #expect(ek.setPositions == nil)
+    }
+
+    @Test("repeated days of the month are written once")
+    func dedupesDaysOfMonth() throws {
+        let ek = try RecurrenceRule(frequency: .monthly, daysOfMonth: [15, 1, 15]).toEKRecurrenceRule()
+
+        #expect(ek.daysOfTheMonth?.map { $0.intValue } == [15, 1])
+    }
+
+    @Test("monthly nth weekday is written in week-number form, like Reminders.app (BYDAY=1MO)")
+    func monthlyNthWeekday() throws {
+        let rule = RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 1, weekday: "monday"))
+
+        let ek = try rule.toEKRecurrenceRule()
+
+        #expect(ek.daysOfTheWeek?.count == 1)
+        #expect(ek.daysOfTheWeek?.first?.dayOfTheWeek == .monday)
+        #expect(ek.daysOfTheWeek?.first?.weekNumber == 1)
+        #expect(ek.setPositions == nil)
+        #expect(ek.daysOfTheMonth == nil)
+        #expect(ek.description.contains("BYDAY=1MO"))
+    }
+
+    @Test("the last weekday is week number -1")
+    func lastWeekday() throws {
+        let rule = RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: -1, weekday: "friday"))
+
+        let ek = try rule.toEKRecurrenceRule()
+
+        #expect(ek.daysOfTheWeek?.first?.dayOfTheWeek == .friday)
+        #expect(ek.daysOfTheWeek?.first?.weekNumber == -1)
+        #expect(ek.description.contains("BYDAY=-1FR"))
+    }
+
+    @Test("yearly months of the year")
+    func monthsOfYear() throws {
+        let ek = try RecurrenceRule(frequency: .yearly, monthsOfYear: [3, 6]).toEKRecurrenceRule()
+
+        #expect(ek.frequency == .yearly)
+        #expect(ek.monthsOfTheYear?.map { $0.intValue } == [3, 6])
+        #expect(ek.daysOfTheWeek == nil)
+    }
+
+    @Test("Thanksgiving: yearly, November, fourth Thursday")
+    func thanksgivingRule() throws {
+        let ek = try thanksgiving.toEKRecurrenceRule()
+
+        #expect(ek.frequency == .yearly)
+        #expect(ek.monthsOfTheYear?.map { $0.intValue } == [11])
+        #expect(ek.daysOfTheWeek?.first?.dayOfTheWeek == .thursday)
+        #expect(ek.daysOfTheWeek?.first?.weekNumber == 4)
+        #expect(ek.description.contains("BYMONTH=11"))
+        #expect(ek.description.contains("BYDAY=4TH"))
+    }
+
+    @Test("occurrenceCount becomes an occurrence-count end")
+    func occurrenceCount() throws {
+        let ek = try RecurrenceRule(frequency: .daily, occurrenceCount: 3).toEKRecurrenceRule()
+
+        #expect(ek.recurrenceEnd?.occurrenceCount == 3)
+        #expect(ek.recurrenceEnd?.endDate == nil)
+    }
+
+    @Test("endDate becomes 23:59:59 on that day in the system time zone")
+    func endDate() throws {
+        let ek = try RecurrenceRule(frequency: .daily, endDate: "2026-12-31").toEKRecurrenceRule()
+
+        let end = try #require(ek.recurrenceEnd?.endDate)
+        #expect(ek.recurrenceEnd?.occurrenceCount == 0)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: end)
+        #expect(parts.year == 2026 && parts.month == 12 && parts.day == 31)
+        #expect(parts.hour == 23 && parts.minute == 59 && parts.second == 59)
+    }
+
+    @Test("sends only the fields that apply")
+    func sendsOnlyApplicableFields() throws {
+        let ek = try RecurrenceRule(frequency: .monthly, daysOfMonth: [5]).toEKRecurrenceRule()
+
+        #expect(ek.daysOfTheWeek == nil)
+        #expect(ek.monthsOfTheYear == nil)
+        #expect(ek.setPositions == nil)
+        #expect(ek.recurrenceEnd == nil)
+    }
+}
+
+@Suite("End of day")
+struct EndOfDayTests {
+    private func zone(_ id: String) -> TimeZone { TimeZone(identifier: id)! }
+
+    @Test("converts to 23:59:59 and back to the same calendar date in several time zones")
+    func roundTripsAcrossZones() throws {
+        for id in ["UTC", "America/Los_Angeles", "Asia/Tokyo", "Pacific/Kiritimati", "Pacific/Pago_Pago"] {
+            for day in ["2026-12-31", "2028-02-29", "2026-01-01", "2026-03-08", "2026-11-01"] {
+                let end = try #require(RecurrenceRule.endOfDay(day, in: zone(id)), "\(day) \(id)")
+                #expect(RecurrenceRule.calendarDate(of: end, in: zone(id)) == day)
+            }
+        }
+    }
+
+    @Test("the instant is the last second of the day")
+    func lastSecond() throws {
+        let tokyo = zone("Asia/Tokyo")
+        let end = try #require(RecurrenceRule.endOfDay("2026-12-31", in: tokyo))
+
+        // 2026-12-31T23:59:59+09:00 is 14:59:59Z
+        #expect(end.timeIntervalSince1970 == 1_798_729_199)
+        #expect(RecurrenceRule.calendarDate(of: end.addingTimeInterval(1), in: tokyo) == "2027-01-01")
+    }
+
+    @Test("rejects malformed and impossible dates")
+    func rejectsBadDates() {
+        for day in ["2026-02-30", "2026-13-01", "2026-00-10", "2027-02-29", "2026-04-31", "2026-1-5",
+                    "12/31/2026", "2026-12-31T00:00:00Z", "tomorrow", "", "0000-01-01"] {
+            #expect(RecurrenceRule.endOfDay(day, in: .current) == nil, "\(day)")
+        }
+    }
+}
+
+@Suite("Full vocabulary from EventKit")
+struct FullVocabularyFromEventKitTests {
+    @Test("monthly days of the month")
+    func daysOfMonth() {
+        let rule = ekRule(.monthly, interval: 2, daysOfMonth: [1, 15])
+
+        #expect(RecurrenceRule.from(rule) == RecurrenceRule(frequency: .monthly, interval: 2, daysOfMonth: [1, 15]))
+    }
+
+    @Test("nth weekday in week-number form")
+    func weekNumberForm() {
+        let rule = ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 1)])
+
+        #expect(
+            RecurrenceRule.from(rule)
+                == RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 1, weekday: "monday")))
+    }
+
+    @Test("nth weekday in position form: weekday Monday plus setPositions [1] is the first Monday")
+    func positionForm() {
+        let rule = ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday)], positions: [1])
+
+        #expect(
+            RecurrenceRule.from(rule)
+                == RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 1, weekday: "monday")))
+    }
+
+    @Test("position -1 is the last weekday")
+    func lastPosition() {
+        let rule = ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.friday)], positions: [-1])
+
+        #expect(
+            RecurrenceRule.from(rule)
+                == RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: -1, weekday: "friday")))
+    }
+
+    @Test("both encodings of Thanksgiving read the same")
+    func thanksgivingBothForms() {
+        let weekNumber = ekRule(.yearly, days: [EKRecurrenceDayOfWeek(.thursday, weekNumber: 4)], months: [11])
+        let position = ekRule(.yearly, days: [EKRecurrenceDayOfWeek(.thursday)], months: [11], positions: [4])
+
+        #expect(RecurrenceRule.from(weekNumber) == thanksgiving)
+        #expect(RecurrenceRule.from(position) == thanksgiving)
+    }
+
+    @Test("yearly months of the year")
+    func monthsOfYear() {
+        #expect(
+            RecurrenceRule.from(ekRule(.yearly, months: [3, 6]))
+                == RecurrenceRule(frequency: .yearly, monthsOfYear: [3, 6]))
+    }
+
+    @Test("occurrenceCount is read as-is")
+    func occurrenceCount() {
+        let rule = ekRule(.daily, end: EKRecurrenceEnd(occurrenceCount: 7))
+
+        #expect(RecurrenceRule.from(rule) == RecurrenceRule(frequency: .daily, occurrenceCount: 7))
+    }
+
+    @Test("an end date reads back as the local calendar date")
+    func endDate() throws {
+        let end = try #require(RecurrenceRule.endOfDay("2026-12-31", in: .current))
+
+        #expect(
+            RecurrenceRule.from(ekRule(.weekly, end: EKRecurrenceEnd(end: end)))
+                == RecurrenceRule(frequency: .weekly, endDate: "2026-12-31"))
+    }
+
+    @Test("round-trips the whole vocabulary")
+    func roundTrips() throws {
+        let rules = [
+            RecurrenceRule(frequency: .monthly),
+            RecurrenceRule(frequency: .monthly, interval: 2, daysOfMonth: [1, 15, 31]),
+            RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 1, weekday: "monday")),
+            RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: -1, weekday: "friday"), endDate: "2027-06-30"),
+            RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 5, weekday: "sunday"), occurrenceCount: 4),
+            RecurrenceRule(frequency: .yearly),
+            RecurrenceRule(frequency: .yearly, interval: 2, monthsOfYear: [3, 6]),
+            thanksgiving,
+            RecurrenceRule(frequency: .daily, endDate: "2026-12-31"),
+            RecurrenceRule(frequency: .weekly, daysOfWeek: ["monday"], occurrenceCount: 3),
+        ]
+        for rule in rules {
+            #expect(RecurrenceRule.from(try rule.toEKRecurrenceRule()) == rule, "\(rule)")
+        }
+    }
+
+    @Test("patterns that don't map exactly are nil, never approximated")
+    func unmapped() {
+        let monday = EKRecurrenceDayOfWeek(.monday)
+        let tuesday = EKRecurrenceDayOfWeek(.tuesday)
+        let rules: [EKRecurrenceRule] = [
+            // every Monday of the month: weekday without a position
+            ekRule(.monthly, days: [monday]),
+            // weekday set with a position (first Monday or Tuesday)
+            ekRule(.monthly, days: [monday, tuesday], positions: [1]),
+            // weekday set (last weekday-ish) with several positions
+            ekRule(.monthly, days: [monday], positions: [1, 3]),
+            // position out of range
+            ekRule(.monthly, days: [monday], positions: [6]),
+            ekRule(.monthly, days: [monday], positions: [-2]),
+            // several ordinals
+            ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 1), EKRecurrenceDayOfWeek(.monday, weekNumber: 3)]),
+            // ordinal out of range
+            ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 6)]),
+            // week number and a position together
+            ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 1)], positions: [1]),
+            // days of month together with a weekday
+            ekRule(.monthly, days: [EKRecurrenceDayOfWeek(.monday, weekNumber: 1)], daysOfMonth: [1]),
+            // negative days of month
+            ekRule(.monthly, daysOfMonth: [-1]),
+            ekRule(.monthly, daysOfMonth: [1, -1]),
+            // months on a monthly rule, days of month on a yearly one
+            ekRule(.monthly, months: [3]),
+            ekRule(.yearly, daysOfMonth: [1]),
+            // yearly nth weekday without months can't be written back, so it isn't reported
+            ekRule(.yearly, days: [EKRecurrenceDayOfWeek(.thursday, weekNumber: 4)]),
+            // position on a rule without a weekday
+            ekRule(.monthly, positions: [1]),
+            // weekly with a position
+            ekRule(.weekly, days: [monday], positions: [1]),
+        ]
+        for (index, rule) in rules.enumerated() {
+            #expect(RecurrenceRule.from(rule) == nil, "rule \(index): \(rule)")
+        }
+    }
+}
+
+@Suite("Full vocabulary validation")
+struct FullVocabularyValidationTests {
+    private func message(_ rule: RecurrenceRule) -> String? { errorMessage { try rule.validate() } }
+    private let monday = NthWeekday(ordinal: 1, weekday: "monday")
+
+    @Test("accepts every valid shape")
+    func acceptsValid() throws {
+        try RecurrenceRule(frequency: .monthly, daysOfMonth: [1, 31]).validate()
+        try RecurrenceRule(frequency: .monthly, nthWeekday: monday).validate()
+        try RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: -1, weekday: "friday")).validate()
+        try RecurrenceRule(frequency: .yearly, monthsOfYear: [1, 12]).validate()
+        try thanksgiving.validate()
+        try RecurrenceRule(frequency: .daily, endDate: "2028-02-29").validate()
+        try RecurrenceRule(frequency: .daily, occurrenceCount: 1).validate()
+    }
+
+    @Test("rejects fields that don't apply to the frequency")
+    func rejectsMismatches() {
+        for frequency in [RecurrenceFrequency.daily, .weekly, .yearly] {
+            #expect(message(RecurrenceRule(frequency: frequency, daysOfMonth: [1])) == "daysOfMonth only applies to monthly rules")
+        }
+        for frequency in [RecurrenceFrequency.daily, .weekly, .monthly] {
+            #expect(message(RecurrenceRule(frequency: frequency, monthsOfYear: [3])) == "monthsOfYear only applies to yearly rules")
+        }
+        for frequency in [RecurrenceFrequency.daily, .weekly] {
+            #expect(
+                message(RecurrenceRule(frequency: frequency, nthWeekday: monday))
+                    == "nthWeekday only applies to monthly and yearly rules")
+        }
+    }
+
+    @Test("rejects daysOfMonth together with nthWeekday")
+    func rejectsBoth() {
+        #expect(
+            message(RecurrenceRule(frequency: .monthly, daysOfMonth: [1], nthWeekday: monday))
+                == "Use either daysOfMonth or nthWeekday, not both")
+    }
+
+    @Test("rejects a yearly nthWeekday without monthsOfYear")
+    func yearlyNthNeedsMonths() {
+        #expect(
+            message(RecurrenceRule(frequency: .yearly, nthWeekday: NthWeekday(ordinal: 4, weekday: "thursday")))
+                == "A yearly nthWeekday needs monthsOfYear (e.g. the fourth Thursday of November)")
+    }
+
+    @Test("rejects endDate together with occurrenceCount")
+    func rejectsEndAndCount() {
+        #expect(
+            message(RecurrenceRule(frequency: .daily, endDate: "2026-12-31", occurrenceCount: 3))
+                == "Use either endDate or occurrenceCount, not both")
+    }
+
+    @Test("rejects days of month outside 1-31")
+    func rejectsDayRange() {
+        for day in [0, 32, -1, 100, Int.min, Int.max] {
+            #expect(
+                message(RecurrenceRule(frequency: .monthly, daysOfMonth: [1, day]))
+                    == "daysOfMonth must be whole numbers from 1 to 31")
+        }
+    }
+
+    @Test("rejects months outside 1-12")
+    func rejectsMonthRange() {
+        for month in [0, 13, -1, Int.max] {
+            #expect(
+                message(RecurrenceRule(frequency: .yearly, monthsOfYear: [month]))
+                    == "monthsOfYear must be whole numbers from 1 to 12")
+        }
+    }
+
+    @Test("rejects ordinals other than 1-5 and -1")
+    func rejectsOrdinal() {
+        for ordinal in [0, 6, -2, 53, -53, Int.max, Int.min] {
+            #expect(
+                message(RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: ordinal, weekday: "monday")))
+                    == "nthWeekday.ordinal must be 1, 2, 3, 4, 5 or -1 (last)")
+        }
+    }
+
+    @Test("rejects an unknown nthWeekday weekday")
+    func rejectsNthWeekdayName() {
+        for name in ["mon", "Monday", "someday", ""] {
+            #expect(
+                message(RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 1, weekday: name)))
+                    == "nthWeekday.weekday must use a full lowercase weekday name: sunday, monday, tuesday, wednesday, thursday, friday, saturday")
+        }
+    }
+
+    @Test("rejects empty arrays")
+    func rejectsEmptyArrays() {
+        #expect(
+            message(RecurrenceRule(frequency: .monthly, daysOfMonth: []))
+                == "daysOfMonth can't be empty: omit it to repeat on the due date's day")
+        #expect(
+            message(RecurrenceRule(frequency: .yearly, monthsOfYear: []))
+                == "monthsOfYear can't be empty: omit it to repeat in the due date's month")
+    }
+
+    @Test("rejects an occurrenceCount below 1, which would raise an uncatchable exception in EventKit")
+    func rejectsCount() {
+        for count in [0, -1, Int.min] {
+            #expect(
+                message(RecurrenceRule(frequency: .daily, occurrenceCount: count))
+                    == "occurrenceCount must be a whole number, 1 or greater")
+            #expect(errorMessage { _ = try RecurrenceRule(frequency: .daily, occurrenceCount: count).toEKRecurrenceRule() } != nil)
+        }
+    }
+
+    @Test("rejects malformed and impossible end dates")
+    func rejectsEndDate() {
+        for day in ["2026-02-30", "2026-13-01", "2027-02-29", "2026-12-31T00:00:00Z", "12/31/2026", "tomorrow", ""] {
+            #expect(
+                message(RecurrenceRule(frequency: .daily, endDate: day))
+                    == "endDate must be a real calendar date in YYYY-MM-DD format (e.g. 2026-12-31)")
+        }
+    }
+
+    @Test("toEKRecurrenceRule refuses every one of these before EventKit sees them")
+    func conversionValidatesFirst() {
+        let bad = [
+            RecurrenceRule(frequency: .monthly, daysOfMonth: [32]),
+            RecurrenceRule(frequency: .yearly, monthsOfYear: [13]),
+            RecurrenceRule(frequency: .monthly, nthWeekday: NthWeekday(ordinal: 6, weekday: "monday")),
+            RecurrenceRule(frequency: .daily, endDate: "2026-02-30"),
+            RecurrenceRule(frequency: .daily, endDate: "2026-12-31", occurrenceCount: 2),
+        ]
+        for rule in bad {
+            #expect(errorMessage { _ = try rule.toEKRecurrenceRule() } != nil, "\(rule)")
+        }
+    }
+}
+
+@Suite("Full vocabulary JSON")
+struct FullVocabularyJSONTests {
+    private func decode(_ json: String) throws -> RecurrenceRule {
+        try JSONDecoder().decode(RecurrenceRule.self, from: Data(json.utf8))
+    }
+
+    @Test("decodes every new field")
+    func decodesNewFields() throws {
+        let rule = try decode(
+            #"{"frequency":"yearly","monthsOfYear":[11],"nthWeekday":{"ordinal":4,"weekday":"thursday"},"endDate":"2030-11-28"}"#)
+
+        #expect(
+            rule == RecurrenceRule(
+                frequency: .yearly, nthWeekday: NthWeekday(ordinal: 4, weekday: "thursday"),
+                monthsOfYear: [11], endDate: "2030-11-28"))
+        #expect(try decode(#"{"frequency":"monthly","daysOfMonth":[1,15],"occurrenceCount":3}"#)
+            == RecurrenceRule(frequency: .monthly, daysOfMonth: [1, 15], occurrenceCount: 3))
+    }
+
+    @Test("an out-of-range value decodes, then fails validation with a specific message")
+    func outOfRangeFailsValidation() throws {
+        let rule = try decode(#"{"frequency":"daily","occurrenceCount":0}"#)
+
+        #expect(errorMessage { try rule.validate() } == "occurrenceCount must be a whole number, 1 or greater")
+    }
+
+    @Test("encodes only the fields that apply")
+    func encodesCompactly() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        let json = try encoder.encode(thanksgiving)
+
+        #expect(
+            String(decoding: json, as: UTF8.self)
+                == #"{"frequency":"yearly","interval":1,"monthsOfYear":[11],"nthWeekday":{"ordinal":4,"weekday":"thursday"}}"#)
     }
 }

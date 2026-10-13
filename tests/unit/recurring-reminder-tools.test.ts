@@ -57,7 +57,16 @@ describe('create_reminder with recurrence', () => {
     const recurrence = props.recurrence;
     expect(recurrence.type).toBe('object');
     expect(recurrence.required).toEqual(['frequency']);
-    expect(Object.keys(recurrence.properties)).toEqual(['frequency', 'interval', 'daysOfWeek']);
+    expect(Object.keys(recurrence.properties)).toEqual([
+      'frequency',
+      'interval',
+      'daysOfWeek',
+      'daysOfMonth',
+      'nthWeekday',
+      'monthsOfYear',
+      'endDate',
+      'occurrenceCount',
+    ]);
     for (const field of Object.values<any>(recurrence.properties)) {
       expect(field.description).toBeTruthy();
     }
@@ -66,6 +75,45 @@ describe('create_reminder with recurrence', () => {
       'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     ]);
     expect(recurrence.properties.interval.minimum).toBe(1);
+  });
+
+  it('describes the new fields so agents use them correctly', () => {
+    const props = (createReminderTool.inputSchema.properties as Record<string, any>).recurrence
+      .properties;
+    expect(props.daysOfMonth.items).toMatchObject({ type: 'integer', minimum: 1, maximum: 31 });
+    expect(props.monthsOfYear.items).toMatchObject({ type: 'integer', minimum: 1, maximum: 12 });
+    expect(props.nthWeekday.required).toEqual(['ordinal', 'weekday']);
+    expect(props.nthWeekday.properties.ordinal.enum).toEqual([1, 2, 3, 4, 5, -1]);
+    expect(props.nthWeekday.properties.weekday.enum).toEqual([
+      'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+    ]);
+    expect(props.occurrenceCount.minimum).toBe(1);
+    expect(props.occurrenceCount.description).toContain('remaining, including the current one');
+    expect(props.endDate.description).toContain('inclusive');
+    expect(props.endDate.description).toContain('YYYY-MM-DD');
+  });
+
+  it('round-trips Thanksgiving through create and shows its summary', async () => {
+    const thanksgiving: RecurrenceRule = {
+      frequency: 'yearly',
+      interval: 1,
+      monthsOfYear: [11],
+      nthWeekday: { ordinal: 4, weekday: 'thursday' },
+    };
+    const { executor, execute } = executorReturning(
+      reminder({
+        title: 'Thanksgiving',
+        dueDate: '2026-11-26T00:00:00.000Z',
+        hasRecurrenceRules: true,
+        recurrence: thanksgiving,
+      })
+    );
+    const result = await createReminderHandler(
+      { title: 'Thanksgiving', dueDate: '2026-11-26', recurrence: thanksgiving },
+      executor
+    );
+    expect(execute.mock.calls[0][1].recurrence).toEqual(thanksgiving);
+    expect(textOf(result)).toContain('🔁 Every year on the fourth Thursday of November');
   });
 
   it('passes the rule to the CLI and shows the summary line', async () => {

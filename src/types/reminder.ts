@@ -9,6 +9,12 @@ export type Weekday =
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
+/** "The first Monday" is `{ ordinal: 1, weekday: 'monday' }`; ordinal -1 means the last one. */
+export interface NthWeekday {
+  ordinal: 1 | 2 | 3 | 4 | 5 | -1;
+  weekday: Weekday;
+}
+
 /**
  * Recurrence rule, used for input (create) and output (get_reminder, list tools)
  */
@@ -16,6 +22,11 @@ export interface RecurrenceRule {
   frequency: RecurrenceFrequency;
   interval: number; // integer >= 1
   daysOfWeek?: Weekday[]; // weekly only
+  daysOfMonth?: number[]; // monthly only, 1-31
+  nthWeekday?: NthWeekday; // monthly or yearly
+  monthsOfYear?: number[]; // yearly only, 1-12
+  endDate?: string; // YYYY-MM-DD, inclusive
+  occurrenceCount?: number; // occurrences remaining, including the current one
 }
 
 /**
