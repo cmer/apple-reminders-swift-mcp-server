@@ -276,7 +276,12 @@ start_service() {
   stop_service
   local i
   for i in 1 2 3 4 5; do
-    launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null && return 0
+    if launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null; then
+      # RunAtLoad isn't a guarantee: launchd can defer the first spawn
+      # ("speculative") indefinitely, leaving the job loaded but never run.
+      launchctl kickstart "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+      return 0
+    fi
     sleep 1
   done
   die "launchctl could not load $PLIST"
