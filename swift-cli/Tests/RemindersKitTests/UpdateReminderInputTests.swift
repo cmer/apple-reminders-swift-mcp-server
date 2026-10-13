@@ -221,11 +221,13 @@ struct ApplyUpdateTests {
         let ek = reminder(rules: rules)
         #expect(ReminderRecurrence.from(rules: ek.recurrenceRules).map { if case .unsupported = $0 { true } else { false } } == true)
 
+        let before = ReminderRecurrence.from(rules: ek.recurrenceRules)
+
         try ReminderManager.applyRecurrence(.unchanged, to: ek)
 
+        // By value: EventKit doesn't always hand back the same rule objects, so `===` is flaky
         #expect(ek.recurrenceRules?.count == 2)
-        #expect(ek.recurrenceRules?[0] === rules[0])
-        #expect(ek.recurrenceRules?[1] === rules[1])
+        #expect(ReminderRecurrence.from(rules: ek.recurrenceRules) == before)
     }
 
     @Test("an omitted recurrence leaves a supported rule untouched")

@@ -77,6 +77,34 @@ export interface Reminder {
 }
 
 /**
+ * What completing a reminder did, as reported by the `complete-reminder` command.
+ * `advanced`: a recurring reminder moved to its next occurrence and is still open.
+ * `lastOccurrence`: a recurring reminder had no next occurrence and is completed for good.
+ * `completed`: a reminder that doesn't repeat is now completed.
+ */
+export type CompleteOutcome = 'completed' | 'advanced' | 'lastOccurrence';
+
+/** Data of the `complete-reminder` response. */
+export interface CompleteReminderResult {
+  reminder: Reminder; // after the save; for `advanced`, the same reminder at its next occurrence
+  outcome: CompleteOutcome;
+  previousDueDate: string | null; // ISO 8601 due date before the save; whether it had a time is reminder.dueDateHasTime
+}
+
+/**
+ * What uncompleting a reminder did.
+ * `reopened`: the reminder is open again.
+ * `alreadyOpen`: a recurring reminder that was already open; nothing was changed.
+ */
+export type UncompleteOutcome = 'reopened' | 'alreadyOpen';
+
+/** Data of the `uncomplete-reminder` response. */
+export interface UncompleteReminderResult {
+  reminder: Reminder;
+  outcome: UncompleteOutcome;
+}
+
+/**
  * Input for creating a reminder
  */
 export interface CreateReminderInput {

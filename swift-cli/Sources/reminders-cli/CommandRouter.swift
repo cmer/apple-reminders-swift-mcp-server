@@ -96,8 +96,8 @@ class CommandRouter {
         }
         
         let input = try decodeInput(CompleteReminderInput.self, from: jsonInput)
-        let reminder = try reminderManager.completeReminder(id: input.id)
-        let response = CLIResponse(success: true, data: reminder)
+        let result = try reminderManager.completeReminder(id: input.id)
+        let response = CLIResponse(success: true, data: result)
         return try encodeResponse(response)
     }
     
@@ -107,8 +107,8 @@ class CommandRouter {
         }
         
         let input = try decodeInput(UncompleteReminderInput.self, from: jsonInput)
-        let reminder = try reminderManager.uncompleteReminder(id: input.id)
-        let response = CLIResponse(success: true, data: reminder)
+        let result = try reminderManager.uncompleteReminder(id: input.id)
+        let response = CLIResponse(success: true, data: result)
         return try encodeResponse(response)
     }
     

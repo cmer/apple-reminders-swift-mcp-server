@@ -322,28 +322,49 @@ public class ReminderManager {
         return Reminder(from: ekReminder)
     }
     
-    /// Mark a reminder as complete
+    /// Mark a reminder as complete.
+    ///
+    /// Saving a recurring reminder with `isCompleted = true` makes EventKit advance it in place
+    /// (same ID, open, next due date, count-based end decremented, a completed copy left behind)
+    /// or, at the last occurrence, complete it. The saved object reflects that state, so the
+    /// outcome is read from it right after the save.
     /// - Parameter id: The reminder identifier
-    /// - Returns: The updated reminder
-    public func completeReminder(id: String) throws -> Reminder {
+    /// - Returns: The reminder after the save, how the completion played out, and the previous due date
+    public func completeReminder(id: String) throws -> CompleteReminderResult {
         guard let ekReminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
             throw ReminderError.reminderNotFound(id)
         }
+        
+        let before = CompletionSnapshot(
+            hasRecurrenceRules: ekReminder.hasRecurrenceRules, isCompleted: ekReminder.isCompleted)
+        let previousDueDate = ekReminder.dueDateComponents?.date
         
         ekReminder.isCompleted = true
         ekReminder.completionDate = Date()
         
         try eventStore.save(ekReminder, commit: true)
         
-        return Reminder(from: ekReminder)
+        let after = CompletionSnapshot(
+            hasRecurrenceRules: ekReminder.hasRecurrenceRules, isCompleted: ekReminder.isCompleted)
+        return CompleteReminderResult(
+            reminder: Reminder(from: ekReminder),
+            outcome: classifyCompletion(before: before, after: after),
+            previousDueDate: previousDueDate)
     }
     
-    /// Mark a reminder as incomplete
+    /// Mark a reminder as incomplete. A recurring reminder that is already open is left alone:
+    /// it advanced when it was completed, and that can't be undone.
     /// - Parameter id: The reminder identifier
-    /// - Returns: The updated reminder
-    public func uncompleteReminder(id: String) throws -> Reminder {
+    /// - Returns: The reminder and whether it was reopened or was already open
+    public func uncompleteReminder(id: String) throws -> UncompleteReminderResult {
         guard let ekReminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder else {
             throw ReminderError.reminderNotFound(id)
+        }
+        
+        let outcome = decideUncomplete(
+            hasRecurrenceRules: ekReminder.hasRecurrenceRules, isCompleted: ekReminder.isCompleted)
+        guard outcome == .reopened else {
+            return UncompleteReminderResult(reminder: Reminder(from: ekReminder), outcome: outcome)
         }
         
         ekReminder.isCompleted = false
@@ -351,7 +372,7 @@ public class ReminderManager {
         
         try eventStore.save(ekReminder, commit: true)
         
-        return Reminder(from: ekReminder)
+        return UncompleteReminderResult(reminder: Reminder(from: ekReminder), outcome: outcome)
     }
     
     // MARK: - Update helpers
